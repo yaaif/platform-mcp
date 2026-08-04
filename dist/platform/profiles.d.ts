@@ -10,6 +10,12 @@ export type PlatformProfile = {
     control_plane_base_url: string;
     approval_base_url: string;
     oidc_client_id?: string;
+    /** Absolute path to extra CA PEM (corporate / local Traefik). */
+    extra_ca_file?: string;
+    /** Absolute path to client cert PEM for mTLS. */
+    client_cert_file?: string;
+    /** Absolute path to client key PEM for mTLS. */
+    client_key_file?: string;
 };
 export type ActiveProfileState = {
     profile_id: string;

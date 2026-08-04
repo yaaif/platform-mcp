@@ -51,9 +51,11 @@ export function registerPlanTools(server, ctx) {
                 mcp_tool_names: args.mcp_tool_names,
                 ambient_agent_names: args.ambient_agent_names,
             }, buckets);
+            void ctx.telemetry.increment(result.ok ? "plan_verify_ok" : "plan_verify_fail");
             return ok(result.ok ? "Plan verification passed." : "Plan verification found missing components.", { ...result, catalog_errors: raw.errors });
         }
         catch (e) {
+            void ctx.telemetry.increment("plan_verify_fail");
             return fail(String(e));
         }
     });
@@ -103,5 +105,96 @@ export function registerPlanTools(server, ctx) {
             }
         }
         return ok(`Dry-run prepared ${actions.length} action(s); nothing was mutated.`, out);
+    });
+    server.registerTool("yaaif_plan_execution_save", {
+        description: "Persist a plan execution checklist (step statuses + result ids) under ~/.yaaif/cursor/plan-executions/ for resume.",
+        inputSchema: {
+            slug: z.string(),
+            plan_path: z.string().optional(),
+            steps: z.array(z.object({
+                id: z.string(),
+                tool: z.string(),
+                arguments: z.record(z.unknown()).optional(),
+                note: z.string().optional(),
+                status: z.enum(["pending", "done", "failed", "skipped"]).optional(),
+                result_ids: z.record(z.string()).optional(),
+                error: z.string().optional(),
+            })),
+        },
+    }, async ({ slug, plan_path, steps }) => {
+        const sess = await ctx.auth.session();
+        const now = new Date().toISOString();
+        const existing = await ctx.plans.get(slug);
+        const normalized = steps.map((s) => ({
+            id: s.id,
+            tool: s.tool,
+            arguments: s.arguments,
+            note: s.note,
+            status: s.status || "pending",
+            result_ids: s.result_ids,
+            error: s.error,
+            updated_at: now,
+        }));
+        const exec = {
+            slug,
+            plan_path: plan_path || existing?.plan_path,
+            tenant_id: sess?.tenant_id,
+            profile_id: ctx.cfg.activeProfileId || sess?.profile_id,
+            created_at: existing?.created_at || now,
+            updated_at: now,
+            steps: normalized,
+        };
+        const saved = await ctx.plans.save(exec);
+        return ok(`Saved plan execution ${slug}.`, { execution: saved, resume: ctx.plans.resumeHint(saved) });
+    });
+    server.registerTool("yaaif_plan_execution_get", {
+        description: "Load a saved plan execution by slug.",
+        inputSchema: { slug: z.string() },
+    }, async ({ slug }) => {
+        const exec = await ctx.plans.get(slug);
+        if (!exec)
+            return fail(`plan execution not found: ${slug}`);
+        return ok(`Loaded plan execution ${slug}.`, { execution: exec, resume: ctx.plans.resumeHint(exec) });
+    });
+    server.registerTool("yaaif_plan_execution_list", {
+        description: "List saved plan executions.",
+        inputSchema: {},
+    }, async () => {
+        return ok("Listed plan executions.", { items: await ctx.plans.list() });
+    });
+    server.registerTool("yaaif_plan_execution_update_step", {
+        description: "Update one step status/result_ids on a saved plan execution (call after each mutate).",
+        inputSchema: {
+            slug: z.string(),
+            step_id: z.string(),
+            status: z.enum(["pending", "done", "failed", "skipped"]),
+            result_ids: z.record(z.string()).optional(),
+            error: z.string().optional(),
+        },
+    }, async ({ slug, step_id, status, result_ids, error }) => {
+        const exec = await ctx.plans.get(slug);
+        if (!exec)
+            return fail(`plan execution not found: ${slug}`);
+        const step = exec.steps.find((s) => s.id === step_id);
+        if (!step)
+            return fail(`step not found: ${step_id}`);
+        step.status = status;
+        step.result_ids = result_ids ?? step.result_ids;
+        step.error = error;
+        step.updated_at = new Date().toISOString();
+        const saved = await ctx.plans.save(exec);
+        return ok(`Updated step ${step_id} → ${status}.`, { execution: saved, resume: ctx.plans.resumeHint(saved) });
+    });
+    server.registerTool("yaaif_plan_execution_resume", {
+        description: "Return the next pending/failed step and collected ids so the agent can continue without redoing completed work.",
+        inputSchema: { slug: z.string() },
+    }, async ({ slug }) => {
+        const exec = await ctx.plans.get(slug);
+        if (!exec)
+            return fail(`plan execution not found: ${slug}`);
+        const resume = ctx.plans.resumeHint(exec);
+        return ok(resume.complete
+            ? `Plan execution ${slug} is complete.`
+            : `Resume ${slug} at step ${resume.next_step?.id} (${resume.next_step?.tool}).`, { execution: exec, resume });
     });
 }

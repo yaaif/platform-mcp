@@ -13,6 +13,12 @@ export type PlatformProfile = {
   control_plane_base_url: string;
   approval_base_url: string;
   oidc_client_id?: string;
+  /** Absolute path to extra CA PEM (corporate / local Traefik). */
+  extra_ca_file?: string;
+  /** Absolute path to client cert PEM for mTLS. */
+  client_cert_file?: string;
+  /** Absolute path to client key PEM for mTLS. */
+  client_key_file?: string;
 };
 
 export type ActiveProfileState = {
@@ -115,6 +121,9 @@ export class ProfileStore {
         profile.approval_base_url || `${trimSlash(profile.api_base_url)}/approval-service`,
       ),
       oidc_client_id: profile.oidc_client_id || "yaaif-cursor",
+      extra_ca_file: profile.extra_ca_file?.trim() || undefined,
+      client_cert_file: profile.client_cert_file?.trim() || undefined,
+      client_key_file: profile.client_key_file?.trim() || undefined,
     };
     const existing = await this.listCustom();
     const next = [...existing.filter((p) => p.id !== id), cleaned];
@@ -169,6 +178,9 @@ export function applyProfileToConfig(cfg: Config, profile: PlatformProfile): Con
   cfg.approvalBaseUrl = trimSlash(profile.approval_base_url);
   if (profile.oidc_client_id) cfg.oidcClientId = profile.oidc_client_id;
   cfg.activeProfileId = profile.id;
+  if (profile.extra_ca_file) cfg.extraCaFile = profile.extra_ca_file;
+  if (profile.client_cert_file) cfg.clientCertFile = profile.client_cert_file;
+  if (profile.client_key_file) cfg.clientKeyFile = profile.client_key_file;
   return cfg;
 }
 

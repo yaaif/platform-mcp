@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { IssuerMismatchError, ReauthRequiredError } from "../auth/oidc.js";
+import { installTlsDispatcher, yaaifFetch } from "../client/tls.js";
+import { exportProfileEnv } from "../lib/profileExport.js";
 import { applyProfileToConfig, inferProfileId, } from "../platform/profiles.js";
 import { normalizeTenants, parseLastTenantId, parseTenantMemberships, resolveTenant, } from "../platform/tenants.js";
 import { fail, ok } from "./helpers.js";
 async function probeOidc(authority) {
     const url = `${authority.replace(/\/+$/, "")}/.well-known/openid-configuration`;
-    const res = await fetch(url);
+    const res = await yaaifFetch(url);
     const text = await res.text();
     if (!res.ok)
         throw new Error(`OIDC discovery failed (${res.status}): ${text.slice(0, 200)}`);
@@ -150,6 +152,7 @@ export function registerAuthTools(server, ctx) {
             const prevIssuer = ctx.cfg.oidcAuthority;
             await ctx.profiles.setActive(profile.id);
             applyProfileToConfig(ctx.cfg, profile);
+            installTlsDispatcher(ctx.cfg);
             const issuerChanged = prevIssuer.replace(/\/+$/, "").toLowerCase()
                 !== profile.oidc_authority.replace(/\/+$/, "").toLowerCase();
             let session_cleared = false;
@@ -157,10 +160,12 @@ export function registerAuthTools(server, ctx) {
                 await ctx.auth.logout({ endSession: false });
                 session_cleared = true;
             }
+            const exported = exportProfileEnv(ctx.cfg);
             return ok(`Active platform profile set to ${profile.id}.`, {
                 profile,
                 session_cleared,
                 issuer_changed: issuerChanged,
+                export: exported,
                 note: session_cleared
                     ? "Session cleared due to OIDC issuer change — call yaaif_login or yaaif_ensure_session."
                     : undefined,
@@ -169,6 +174,16 @@ export function registerAuthTools(server, ctx) {
         catch (e) {
             return fail(String(e));
         }
+    });
+    server.registerTool("yaaif_platform_export", {
+        description: "Export active profile as shell exports and Cursor plugin variable JSON.",
+        inputSchema: {},
+    }, async () => {
+        const exported = exportProfileEnv(ctx.cfg);
+        return ok("Exported platform profile env.", {
+            profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+            ...exported,
+        });
     });
     server.registerTool("yaaif_platform_save", {
         description: "Save or update a custom platform profile under ~/.yaaif/cursor/profiles.json.",
@@ -182,6 +197,9 @@ export function registerAuthTools(server, ctx) {
             control_plane_base_url: z.string().optional(),
             approval_base_url: z.string().optional(),
             oidc_client_id: z.string().optional(),
+            extra_ca_file: z.string().optional(),
+            client_cert_file: z.string().optional(),
+            client_key_file: z.string().optional(),
             activate: z.boolean().optional(),
         },
     }, async (args) => {
@@ -196,10 +214,14 @@ export function registerAuthTools(server, ctx) {
                 control_plane_base_url: args.control_plane_base_url || "",
                 approval_base_url: args.approval_base_url || "",
                 oidc_client_id: args.oidc_client_id,
+                extra_ca_file: args.extra_ca_file,
+                client_cert_file: args.client_cert_file,
+                client_key_file: args.client_key_file,
             });
             if (args.activate) {
                 await ctx.profiles.setActive(profile.id);
                 applyProfileToConfig(ctx.cfg, profile);
+                installTlsDispatcher(ctx.cfg);
             }
             return ok(`Saved custom profile ${profile.id}.`, { profile, activated: Boolean(args.activate) });
         }
@@ -242,7 +264,7 @@ export function registerAuthTools(server, ctx) {
         }
         const probe = async (key, url) => {
             try {
-                out[key] = (await fetch(url)).status;
+                out[key] = (await yaaifFetch(url)).status;
             }
             catch (e) {
                 out[`${key}_error`] = String(e);
@@ -277,6 +299,7 @@ export function registerAuthTools(server, ctx) {
             catch (e) {
                 tenant = { auto_select_error: String(e) };
             }
+            void ctx.telemetry.increment("login_ok");
             return ok("Logged in to YAAIF.", {
                 email: session.email,
                 name: session.name,
@@ -291,6 +314,36 @@ export function registerAuthTools(server, ctx) {
             });
         }
         catch (e) {
+            void ctx.telemetry.increment("login_fail");
+            return fail(String(e));
+        }
+    });
+    server.registerTool("yaaif_login_device", {
+        description: "Headless/CI device-code login (Keycloak device grant). Requires oauth2.device.authorization.grant.enabled on yaaif-cursor.",
+        inputSchema: { timeout_ms: z.number().optional() },
+    }, async ({ timeout_ms }) => {
+        try {
+            const { session, verification_uri, user_code } = await ctx.auth.deviceLogin({ timeout_ms });
+            let tenant;
+            try {
+                tenant = await autoSelectTenant(ctx);
+            }
+            catch (e) {
+                tenant = { auto_select_error: String(e) };
+            }
+            void ctx.telemetry.increment("login_device_ok");
+            return ok("Device login complete.", {
+                email: session.email,
+                tenant_id: (await ctx.auth.session())?.tenant_id || session.tenant_id,
+                tenant_name: (await ctx.auth.session())?.tenant_name,
+                verification_uri,
+                user_code,
+                profile_id: session.profile_id,
+                tenant_selection: tenant,
+            });
+        }
+        catch (e) {
+            void ctx.telemetry.increment("login_device_fail");
             return fail(String(e));
         }
     });
@@ -482,8 +535,10 @@ export function registerAuthTools(server, ctx) {
             if (tenant) {
                 const set = await resolveAndSetTenant(ctx, tenant);
                 if (!set.ok) {
+                    void ctx.telemetry.increment("ensure_session_fail");
                     return fail(set.error, { ready: false, candidates: set.candidates, oidc });
                 }
+                void ctx.telemetry.increment("ensure_session_ok");
                 return ok("Session ready.", {
                     ready: true,
                     logged_in,
@@ -514,6 +569,7 @@ export function registerAuthTools(server, ctx) {
                     hint: "Call yaaif_set_tenant with a tenant name, slug, or uuid.",
                 });
             }
+            void ctx.telemetry.increment("ensure_session_ok");
             return ok("Session ready.", {
                 ready: true,
                 logged_in,
@@ -530,6 +586,7 @@ export function registerAuthTools(server, ctx) {
             });
         }
         catch (e) {
+            void ctx.telemetry.increment("ensure_session_fail");
             return errPayload(e);
         }
     });

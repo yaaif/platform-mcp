@@ -26,5 +26,8 @@ export function loadConfig() {
         defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
         cursorHome: env("YAAIF_CURSOR_HOME", join(homedir(), ".yaaif", "cursor")),
         activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),
+        extraCaFile: env("YAAIF_EXTRA_CA_FILE", env("NODE_EXTRA_CA_CERTS")),
+        clientCertFile: env("YAAIF_CLIENT_CERT_FILE"),
+        clientKeyFile: env("YAAIF_CLIENT_KEY_FILE"),
     };
 }

@@ -5,6 +5,8 @@ import { registerAuthTools } from "./registerAuth.js";
 import { registerDesktopTools } from "./registerDesktop.js";
 import { registerApprovalTools } from "./registerApproval.js";
 import { registerPlanTools } from "./registerPlan.js";
+import { registerOpsTools } from "./registerOps.js";
+import { registerDoctorTools } from "./registerDoctor.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +19,8 @@ export function registerAllTools(server, ctx) {
     registerDesktopTools(server, ctx);
     registerApprovalTools(server, ctx);
     registerPlanTools(server, ctx);
+    registerOpsTools(server, ctx);
+    registerDoctorTools(server, ctx);
 }
 function registerSkills(server, ctx) {
     server.registerTool("yaaif_skill_list", {
@@ -37,11 +41,16 @@ function registerSkills(server, ctx) {
         }
     });
     server.registerTool("yaaif_skill_get", {
-        description: "Get one skill by id.",
+        description: "Get one skill by id (via catalog list ?ids=).",
         inputSchema: { skill_id: z.string() },
     }, async ({ skill_id }) => {
         try {
-            return ok("Fetched skill.", { skill: await ctx.api.agentJSON("GET", `/api/skills/${encodeURIComponent(skill_id)}`) });
+            const result = await ctx.api.agentJSON("GET", `/api/skills?ids=${encodeURIComponent(skill_id)}&limit=1`);
+            const items = Array.isArray(result?.items) ? result.items : [];
+            const skill = items[0];
+            if (!skill)
+                return fail(`skill not found: ${skill_id}`);
+            return ok("Fetched skill.", { skill, result });
         }
         catch (e) {
             return fail(String(e));
@@ -258,16 +267,23 @@ function registerAmbient(server, ctx) {
             limit: z.number().optional(),
         },
     }, async ({ q, agent_type, limit }) => {
+        // Fetch a wider page then filter client-side — backend ignores agent_type today.
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (agent_type)
-            params.set("agent_type", agent_type);
-        if (limit)
-            params.set("limit", String(limit));
-        const path = `/api/agents${params.size ? `?${params}` : ""}`;
+        params.set("limit", String(Math.min(Math.max(limit ?? 50, 1), 200)));
+        const path = `/api/agents?${params}`;
         try {
-            return ok("Listed agents.", { result: await ctx.api.agentJSON("GET", path) });
+            const result = await ctx.api.agentJSON("GET", path);
+            const items = Array.isArray(result?.items) ? result.items : [];
+            const want = (agent_type || "").trim().toLowerCase();
+            const filtered = want
+                ? items.filter((a) => String(a.agent_type ?? "").toLowerCase() === want)
+                : items;
+            const capped = limit && limit > 0 ? filtered.slice(0, limit) : filtered;
+            return ok("Listed agents.", {
+                result: { ...result, items: capped, filtered_by_agent_type: want || null, unfiltered_count: items.length },
+            });
         }
         catch (e) {
             return fail(String(e));

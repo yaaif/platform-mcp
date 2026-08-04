@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import open from "open";
+import { yaaifFetch } from "../client/tls.js";
 export class ReauthRequiredError extends Error {
     code = "reauth_required";
     constructor(message) {
@@ -142,7 +143,7 @@ export class AuthClient {
             client_id: this.cfg.oidcClientId,
             code_verifier: verifier,
         });
-        const tokenRes = await fetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
+        const tokenRes = await yaaifFetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body,
@@ -151,6 +152,66 @@ export class AuthClient {
         if (!tokenRes.ok) {
             throw new Error(`token exchange failed (${tokenRes.status}): ${JSON.stringify(raw)}`);
         }
+        const session = await this.persistTokens(raw);
+        return { session, auth_url: authUrlStr };
+    }
+    /**
+     * OAuth 2.0 device authorization grant (headless / CI).
+     * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
+     */
+    async deviceLogin(opts = {}) {
+        await this.store.ensureHome(this.cfg.cursorHome);
+        const deviceEndpoint = `${this.cfg.oidcAuthority}/protocol/openid-connect/auth/device`;
+        const startBody = new URLSearchParams({
+            client_id: this.cfg.oidcClientId,
+            scope: this.cfg.oidcScopes.join(" "),
+        });
+        const startRes = await yaaifFetch(deviceEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: startBody,
+        });
+        const startRaw = (await startRes.json());
+        if (!startRes.ok) {
+            throw new Error(`device auth start failed (${startRes.status}): ${JSON.stringify(startRaw)}. ` +
+                "Enable oauth2.device.authorization.grant.enabled on the yaaif-cursor Keycloak client.");
+        }
+        const deviceCode = String(startRaw.device_code ?? "");
+        const userCode = String(startRaw.user_code ?? "");
+        const verificationUri = String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? "");
+        const intervalSec = typeof startRaw.interval === "number" ? startRaw.interval : 5;
+        const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
+        const deadline = Date.now() + timeoutMs;
+        if (verificationUri) {
+            void open(verificationUri).catch(() => {
+                console.error(`Complete device login at: ${verificationUri} code=${userCode}`);
+            });
+        }
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, Math.max(intervalSec, 2) * 1000));
+            const pollBody = new URLSearchParams({
+                grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+                device_code: deviceCode,
+                client_id: this.cfg.oidcClientId,
+            });
+            const tokenRes = await yaaifFetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: pollBody,
+            });
+            const raw = (await tokenRes.json());
+            if (tokenRes.ok && raw.access_token) {
+                const session = await this.persistTokens(raw);
+                return { session, verification_uri: verificationUri, user_code: userCode };
+            }
+            const err = String(raw.error ?? "");
+            if (err === "authorization_pending" || err === "slow_down")
+                continue;
+            throw new Error(`device auth poll failed: ${JSON.stringify(raw)}`);
+        }
+        throw new Error(`device login timed out. Open ${verificationUri} and enter code ${userCode}`);
+    }
+    async persistTokens(raw) {
         const tokens = tokenSetFromJson(raw);
         const claims = tokens.id_token ? parseIdToken(tokens.id_token) : {};
         const session = {
@@ -163,7 +224,7 @@ export class AuthClient {
             oidc_authority: this.cfg.oidcAuthority,
         };
         await this.store.save(session);
-        return { session, auth_url: authUrlStr };
+        return session;
     }
     async logout(opts = {}) {
         const sess = await this.store.load();
@@ -220,7 +281,7 @@ export class AuthClient {
             refresh_token: sess.tokens.refresh_token ?? "",
             client_id: this.cfg.oidcClientId,
         });
-        const tokenRes = await fetch(`${authority}/protocol/openid-connect/token`, {
+        const tokenRes = await yaaifFetch(`${authority}/protocol/openid-connect/token`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body,

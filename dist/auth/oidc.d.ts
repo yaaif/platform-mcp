@@ -19,6 +19,18 @@ export declare class AuthClient {
         session: Session;
         auth_url: string;
     }>;
+    /**
+     * OAuth 2.0 device authorization grant (headless / CI).
+     * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
+     */
+    deviceLogin(opts?: {
+        timeout_ms?: number;
+    }): Promise<{
+        session: Session;
+        verification_uri: string;
+        user_code: string;
+    }>;
+    private persistTokens;
     logout(opts?: {
         endSession?: boolean;
     }): Promise<{

@@ -1,3 +1,4 @@
+import { yaaifFetch } from "./tls.js";
 function isTenantBootstrapPath(path) {
     return (path.startsWith("/api/users/me/tenants") ||
         path.startsWith("/api/rbac/me") ||
@@ -51,7 +52,7 @@ export class ApiClient {
             headers["Content-Type"] = "application/json";
             payload = JSON.stringify(body);
         }
-        const res = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+        const res = await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
             method,
             headers,
             body: payload,
