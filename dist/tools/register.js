@@ -8,6 +8,7 @@ import { registerPlanTools } from "./registerPlan.js";
 import { registerOpsTools } from "./registerOps.js";
 import { registerDoctorTools } from "./registerDoctor.js";
 import { registerLocalTools } from "./registerLocalTools.js";
+import { registerOpsSupportTools } from "./registerOpsSupport.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +22,7 @@ export function registerAllTools(server, ctx) {
     registerApprovalTools(server, ctx);
     registerPlanTools(server, ctx);
     registerOpsTools(server, ctx);
+    registerOpsSupportTools(server, ctx);
     registerLocalTools(server, ctx);
     registerDoctorTools(server, ctx);
 }
@@ -553,15 +555,24 @@ function registerAmbient(server, ctx) {
         description: "List ambient workflow runs.",
         inputSchema: {
             ambient_agent_id: z.string().optional(),
+            ambient_workflow_id: z.string().optional(),
+            /** @deprecated use ambient_workflow_id */
             workflow_id: z.string().optional(),
+            status: z.string().optional(),
+            q: z.string().optional(),
             limit: z.number().optional(),
         },
     }, async (args) => {
         const params = new URLSearchParams();
         if (args.ambient_agent_id)
             params.set("ambient_agent_id", args.ambient_agent_id);
-        if (args.workflow_id)
-            params.set("workflow_id", args.workflow_id);
+        const workflowID = args.ambient_workflow_id || args.workflow_id;
+        if (workflowID)
+            params.set("ambient_workflow_id", workflowID);
+        if (args.status)
+            params.set("status", args.status);
+        if (args.q)
+            params.set("q", args.q);
         if (args.limit)
             params.set("limit", String(args.limit));
         const path = `/api/ambient/runs${params.size ? `?${params}` : ""}`;

@@ -57,3 +57,14 @@ test("integration local-tools list + smoke call (optional)", async (t) => {
   });
   assert.ok(callRes.status < 500, await callRes.text());
 });
+
+test("integration ops correlate without seed returns 400 (optional)", async (t) => {
+  if (process.env.YAAIF_INTEGRATION !== "1") {
+    t.skip("Set YAAIF_INTEGRATION=1 with an authenticated ~/.yaaif/cursor session to run");
+    return;
+  }
+  const cfg = loadConfig();
+  const headers = await sessionHeaders(cfg);
+  const res = await fetch(`${cfg.agentBaseUrl}/api/ops/correlate`, { headers });
+  assert.equal(res.status, 400, await res.text());
+});

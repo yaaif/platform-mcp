@@ -31,7 +31,7 @@ async function main() {
     const telemetry = new TelemetryStore(cfg.cursorHome);
     const server = new McpServer({
         name: "yaaif-cursor",
-        version: "0.8.0",
+        version: "0.9.0",
     });
     registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
     const transport = new StdioServerTransport();

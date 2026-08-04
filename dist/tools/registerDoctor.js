@@ -111,6 +111,18 @@ export function registerDoctorTools(server, ctx) {
                 add("local_tools_smoke", false, String(e));
                 void ctx.telemetry.increment("doctor_local_tools_smoke_fail");
             }
+            try {
+                // Missing seed → 400 means the RO ops route is mounted.
+                await ctx.api.agentJSON("GET", "/api/ops/correlate");
+                add("ops_api", true, { note: "unexpected 200 without seed" });
+                void ctx.telemetry.increment("doctor_ops_api_ok");
+            }
+            catch (e) {
+                const msg = String(e);
+                const routeOk = /\b400\b/.test(msg) || /at least one of session_id/i.test(msg);
+                add("ops_api", routeOk, { error: msg.slice(0, 240) });
+                void ctx.telemetry.increment(routeOk ? "doctor_ops_api_ok" : "doctor_ops_api_fail");
+            }
         }
         const failed = checks.filter((c) => !c.ok);
         const summary = failed.length
