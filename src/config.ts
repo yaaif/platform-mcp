@@ -16,7 +16,10 @@ function trimSlash(v: string): string {
 }
 
 function env(name: string, fallback = ""): string {
-  return (process.env[name] ?? fallback).trim();
+  const v = (process.env[name] ?? "").trim();
+  // Treat empty / unexpanded plugin-variable placeholders as unset so defaults apply.
+  if (!v || /^\$\{[A-Z0-9_]+\}$/.test(v)) return fallback;
+  return v;
 }
 
 export function loadConfig(): Config {

@@ -13,3 +13,15 @@ test("loadConfig reads env defaults", () => {
   assert.equal(cfg.agentBaseUrl, "https://example.com/agent-host");
   assert.equal(cfg.oidcClientId, "yaaif-cursor");
 });
+
+test("loadConfig ignores unexpanded plugin placeholders", () => {
+  process.env.YAAIF_OIDC_AUTHORITY = "${YAAIF_OIDC_AUTHORITY}";
+  process.env.YAAIF_API_BASE_URL = "${YAAIF_API_BASE_URL}";
+  process.env.YAAIF_AGENT_BASE_URL = "${YAAIF_AGENT_BASE_URL}";
+  delete process.env.YAAIF_OIDC_CLIENT_ID;
+  const cfg = loadConfig();
+  assert.equal(cfg.oidcAuthority, "https://platform.yaaif.ai/auth/realms/yaaif");
+  assert.equal(cfg.apiBaseUrl, "https://platform.yaaif.ai");
+  assert.equal(cfg.agentBaseUrl, "https://platform.yaaif.ai/agent-service");
+  assert.equal(cfg.oidcClientId, "yaaif-cursor");
+});
