@@ -4,6 +4,8 @@ export type PlanExpectations = {
     workflow_names?: string[];
     mcp_tool_names?: string[];
     ambient_agent_names?: string[];
+    /** Platform local tool names expected in skill frontmatter / plan. */
+    local_tool_names?: string[];
 };
 export type CatalogBuckets = {
     agents: {
@@ -23,6 +25,10 @@ export type CatalogBuckets = {
         name?: string;
     }[];
     ambient_agents: {
+        id?: string;
+        name?: string;
+    }[];
+    local_tools: {
         id?: string;
         name?: string;
     }[];

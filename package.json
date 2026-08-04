@@ -1,6 +1,6 @@
 {
   "name": "@yaaif/cursor-mcp",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "YAAIF Cursor MCP bridge — local tools, profiles, auth, doctor, plan resume, skills, MCP, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
@@ -22,6 +22,7 @@
     "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs && npm run bundle",
     "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-cursor-mcp.mjs --packages=bundle",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "generate:local-tools-ref": "node ./scripts/generate-local-tools-ref.mjs",
     "start": "node dist/cli.js",
     "prepublishOnly": "npm test && npm run build"
   },

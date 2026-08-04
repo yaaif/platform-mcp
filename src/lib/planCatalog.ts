@@ -4,6 +4,8 @@ export type PlanExpectations = {
   workflow_names?: string[];
   mcp_tool_names?: string[];
   ambient_agent_names?: string[];
+  /** Platform local tool names expected in skill frontmatter / plan. */
+  local_tool_names?: string[];
 };
 
 export type CatalogBuckets = {
@@ -12,6 +14,7 @@ export type CatalogBuckets = {
   workflows: { id?: string; name?: string }[];
   mcp_tools: { id?: string; name?: string }[];
   ambient_agents: { id?: string; name?: string }[];
+  local_tools: { id?: string; name?: string }[];
 };
 
 function asArray(value: unknown): unknown[] {
@@ -19,6 +22,7 @@ function asArray(value: unknown): unknown[] {
   if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
     if (Array.isArray(obj.items)) return obj.items;
+    if (Array.isArray(obj.names)) return obj.names;
     if (Array.isArray(obj.skills)) return obj.skills;
     if (Array.isArray(obj.agents)) return obj.agents;
     if (Array.isArray(obj.workflows)) return obj.workflows;
@@ -28,24 +32,35 @@ function asArray(value: unknown): unknown[] {
 }
 
 function nameOf(row: unknown): string {
+  if (typeof row === "string") return row.trim();
   if (!row || typeof row !== "object") return "";
   const o = row as Record<string, unknown>;
   return String(o.name ?? o.id ?? "").trim();
 }
 
 function idOf(row: unknown): string {
+  if (typeof row === "string") return row.trim();
   if (!row || typeof row !== "object") return "";
   const o = row as Record<string, unknown>;
   return String(o.id ?? "").trim();
 }
 
 export function extractCatalogBuckets(raw: Record<string, unknown>): CatalogBuckets {
+  const localRaw = raw.local_tools;
+  let localRows = asArray(localRaw);
+  if (localRaw && typeof localRaw === "object" && Array.isArray((localRaw as { names?: unknown[] }).names)) {
+    localRows = (localRaw as { names: unknown[] }).names;
+  }
   return {
     agents: asArray(raw.agents).map((r) => ({ id: idOf(r), name: nameOf(r) })),
     skills: asArray(raw.skills).map((r) => ({ id: idOf(r) || nameOf(r), name: nameOf(r) })),
     workflows: asArray(raw.ambient_workflows).map((r) => ({ id: idOf(r), name: nameOf(r) })),
     mcp_tools: asArray(raw.mcp_tools).map((r) => ({ id: idOf(r), name: nameOf(r) })),
     ambient_agents: asArray(raw.ambient_agents).map((r) => ({ id: idOf(r), name: nameOf(r) })),
+    local_tools: localRows.map((r) => {
+      const n = nameOf(r);
+      return { id: n, name: n };
+    }),
   };
 }
 
@@ -82,6 +97,7 @@ export function verifyPlanAgainstCatalog(expectations: PlanExpectations, buckets
   check("workflow_names", buckets.workflows);
   check("mcp_tool_names", buckets.mcp_tools);
   check("ambient_agent_names", buckets.ambient_agents);
+  check("local_tool_names", buckets.local_tools);
 
   const ok = Object.keys(missing).length === 0;
   return { ok, found, missing, buckets };

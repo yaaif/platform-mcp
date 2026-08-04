@@ -25,6 +25,7 @@ async function loadCatalogSnapshot(ctx: Ctx, q?: string, limit?: number) {
     load("mcp_tools", () => ctx.api.agentJSON("GET", `/api/mcp-tools${qs}`)),
     load("ambient_agents", () => ctx.api.agentJSON("GET", `/api/ambient/agents${qs}`)),
     load("ambient_workflows", () => ctx.api.agentJSON("GET", `/api/ambient/workflows${qs}`)),
+    load("local_tools", () => ctx.api.agentJSON("GET", "/api/local-tools?names_only=true")),
   ]);
   if (Object.keys(errors).length) out.errors = errors;
   return out;
@@ -33,13 +34,14 @@ async function loadCatalogSnapshot(ctx: Ctx, q?: string, limit?: number) {
 export function registerPlanTools(server: McpServer, ctx: Ctx): void {
   server.registerTool("yaaif_plan_verify", {
     description:
-      "Diff expected plan components (agent/skill/workflow/MCP names) against the live tenant catalog.",
+      "Diff expected plan components (agent/skill/workflow/MCP/local-tool names) against the live tenant catalog.",
     inputSchema: {
       agent_names: z.array(z.string()).optional(),
       skill_ids: z.array(z.string()).optional(),
       workflow_names: z.array(z.string()).optional(),
       mcp_tool_names: z.array(z.string()).optional(),
       ambient_agent_names: z.array(z.string()).optional(),
+      local_tool_names: z.array(z.string()).optional(),
       q: z.string().optional(),
       limit: z.number().optional(),
     },
@@ -54,6 +56,7 @@ export function registerPlanTools(server: McpServer, ctx: Ctx): void {
           workflow_names: args.workflow_names,
           mcp_tool_names: args.mcp_tool_names,
           ambient_agent_names: args.ambient_agent_names,
+          local_tool_names: args.local_tool_names,
         },
         buckets,
       );
@@ -84,16 +87,17 @@ export function registerPlanTools(server: McpServer, ctx: Ctx): void {
         workflow_names: z.array(z.string()).optional(),
         mcp_tool_names: z.array(z.string()).optional(),
         ambient_agent_names: z.array(z.string()).optional(),
+        local_tool_names: z.array(z.string()).optional(),
       }).optional(),
     },
   }, async ({ actions, verify_catalog, expected }) => {
-    const mutating = actions.filter((a) => !/^yaaif_(catalog_|.*_list|.*_get|whoami|configure)/.test(a.tool));
+    const mutating = actions.filter((a) => !/^yaaif_(catalog_|.*_list|.*_get|whoami|configure|skill_tools_check|local_tools)/.test(a.tool));
     const out: Record<string, unknown> = {
       dry_run: true,
       action_count: actions.length,
       mutating_action_count: mutating.length,
       actions,
-      note: "No APIs were called except optional catalog verify.",
+      note: "No APIs were called except optional catalog verify (includes local tools).",
     };
     if (verify_catalog || expected) {
       try {
@@ -105,6 +109,7 @@ export function registerPlanTools(server: McpServer, ctx: Ctx): void {
           workflows: buckets.workflows.length,
           mcp_tools: buckets.mcp_tools.length,
           ambient_agents: buckets.ambient_agents.length,
+          local_tools: buckets.local_tools.length,
         };
         if (expected) {
           out.precheck = verifyPlanAgainstCatalog(expected, buckets);

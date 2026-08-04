@@ -5,6 +5,8 @@ function asArray(value) {
         const obj = value;
         if (Array.isArray(obj.items))
             return obj.items;
+        if (Array.isArray(obj.names))
+            return obj.names;
         if (Array.isArray(obj.skills))
             return obj.skills;
         if (Array.isArray(obj.agents))
@@ -17,24 +19,37 @@ function asArray(value) {
     return [];
 }
 function nameOf(row) {
+    if (typeof row === "string")
+        return row.trim();
     if (!row || typeof row !== "object")
         return "";
     const o = row;
     return String(o.name ?? o.id ?? "").trim();
 }
 function idOf(row) {
+    if (typeof row === "string")
+        return row.trim();
     if (!row || typeof row !== "object")
         return "";
     const o = row;
     return String(o.id ?? "").trim();
 }
 export function extractCatalogBuckets(raw) {
+    const localRaw = raw.local_tools;
+    let localRows = asArray(localRaw);
+    if (localRaw && typeof localRaw === "object" && Array.isArray(localRaw.names)) {
+        localRows = localRaw.names;
+    }
     return {
         agents: asArray(raw.agents).map((r) => ({ id: idOf(r), name: nameOf(r) })),
         skills: asArray(raw.skills).map((r) => ({ id: idOf(r) || nameOf(r), name: nameOf(r) })),
         workflows: asArray(raw.ambient_workflows).map((r) => ({ id: idOf(r), name: nameOf(r) })),
         mcp_tools: asArray(raw.mcp_tools).map((r) => ({ id: idOf(r), name: nameOf(r) })),
         ambient_agents: asArray(raw.ambient_agents).map((r) => ({ id: idOf(r), name: nameOf(r) })),
+        local_tools: localRows.map((r) => {
+            const n = nameOf(r);
+            return { id: n, name: n };
+        }),
     };
 }
 function hasName(rows, want) {
@@ -66,6 +81,7 @@ export function verifyPlanAgainstCatalog(expectations, buckets) {
     check("workflow_names", buckets.workflows);
     check("mcp_tool_names", buckets.mcp_tools);
     check("ambient_agent_names", buckets.ambient_agents);
+    check("local_tool_names", buckets.local_tools);
     const ok = Object.keys(missing).length === 0;
     return { ok, found, missing, buckets };
 }

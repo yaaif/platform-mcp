@@ -101,6 +101,16 @@ export function registerDoctorTools(server, ctx) {
                 add("local_tools", false, String(e));
                 void ctx.telemetry.increment("doctor_local_tools_fail");
             }
+            try {
+                const smoke = await ctx.api.agentJSON("POST", "/api/local-tools/list_ambient_workflows/call", { arguments: {}, resolve_workspace: false });
+                const okSmoke = smoke?.is_error !== true;
+                add("local_tools_smoke", okSmoke, { tool: "list_ambient_workflows", result: smoke });
+                void ctx.telemetry.increment(okSmoke ? "doctor_local_tools_smoke_ok" : "doctor_local_tools_smoke_fail");
+            }
+            catch (e) {
+                add("local_tools_smoke", false, String(e));
+                void ctx.telemetry.increment("doctor_local_tools_smoke_fail");
+            }
         }
         const failed = checks.filter((c) => !c.ok);
         const summary = failed.length
