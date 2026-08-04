@@ -88,6 +88,19 @@ export function registerDoctorTools(server, ctx) {
                 add("catalog_ping", false, String(e));
                 void ctx.telemetry.increment("doctor_catalog_fail");
             }
+            try {
+                const localTools = await ctx.api.agentJSON("GET", "/api/local-tools?family=skill");
+                add("local_tools", true, {
+                    skill_count: localTools.count,
+                    total: localTools.total,
+                    family_counts: localTools.family_counts,
+                });
+                void ctx.telemetry.increment("doctor_local_tools_ok");
+            }
+            catch (e) {
+                add("local_tools", false, String(e));
+                void ctx.telemetry.increment("doctor_local_tools_fail");
+            }
         }
         const failed = checks.filter((c) => !c.ok);
         const summary = failed.length

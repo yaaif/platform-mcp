@@ -286,6 +286,18 @@ export class AuthClient {
     return sess;
   }
 
+  async patchSession(patch: Partial<Pick<Session, "dev_session_id" | "dev_agent_id" | "tenant_id" | "tenant_name">>): Promise<Session> {
+    const sess = await this.store.load();
+    if (!sess?.tokens.access_token) throw new ReauthRequiredError("not authenticated; call yaaif_login first");
+    this.assertIssuerMatch(sess);
+    if (patch.dev_session_id !== undefined) sess.dev_session_id = patch.dev_session_id;
+    if (patch.dev_agent_id !== undefined) sess.dev_agent_id = patch.dev_agent_id;
+    if (patch.tenant_id !== undefined) sess.tenant_id = patch.tenant_id;
+    if (patch.tenant_name !== undefined) sess.tenant_name = patch.tenant_name;
+    await this.store.save(sess);
+    return sess;
+  }
+
   async accessToken(): Promise<{ token: string; session: Session }> {
     let sess = await this.store.load();
     if (!sess?.tokens.access_token) throw new ReauthRequiredError("not authenticated; call yaaif_login first");

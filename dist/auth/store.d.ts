@@ -16,6 +16,10 @@ export type Session = {
     profile_id?: string;
     /** OIDC authority / issuer URL at login time. */
     oidc_authority?: string;
+    /** Short-lived Cursor authoring session for files_* / state local tools. */
+    dev_session_id?: string;
+    /** Optional agent id used with the Cursor authoring session. */
+    dev_agent_id?: string;
 };
 export declare class SessionStore {
     readonly path: string;

@@ -39,6 +39,7 @@ export declare class AuthClient {
     }>;
     session(): Promise<Session | null>;
     setTenant(tenantId: string, tenantName?: string): Promise<Session>;
+    patchSession(patch: Partial<Pick<Session, "dev_session_id" | "dev_agent_id" | "tenant_id" | "tenant_name">>): Promise<Session>;
     accessToken(): Promise<{
         token: string;
         session: Session;

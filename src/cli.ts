@@ -32,7 +32,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "yaaif-cursor",
-    version: "0.6.0",
+    version: "0.7.0",
   });
   registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
 

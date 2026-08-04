@@ -9,6 +9,7 @@ import { registerApprovalTools } from "./registerApproval.js";
 import { registerPlanTools } from "./registerPlan.js";
 import { registerOpsTools } from "./registerOps.js";
 import { registerDoctorTools } from "./registerDoctor.js";
+import { registerLocalTools } from "./registerLocalTools.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +26,7 @@ export function registerAllTools(server: McpServer, ctx: Ctx): void {
   registerApprovalTools(server, ctx);
   registerPlanTools(server, ctx);
   registerOpsTools(server, ctx);
+  registerLocalTools(server, ctx);
   registerDoctorTools(server, ctx);
 }
 
@@ -803,6 +805,7 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
       load("mcp_deployments", () => ctx.api.apiJSON("GET", `/api/mcp-deployments${qs}`)),
       load("ambient_agents", () => ctx.api.agentJSON("GET", `/api/ambient/agents${qs}`)),
       load("ambient_workflows", () => ctx.api.agentJSON("GET", `/api/ambient/workflows${qs}`)),
+      load("local_tools", () => ctx.api.agentJSON("GET", "/api/local-tools")),
     ]);
     if (Object.keys(errors).length) out.errors = errors;
     return ok("Catalog overview loaded.", out);
