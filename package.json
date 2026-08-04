@@ -1,0 +1,43 @@
+{
+  "name": "@yaaif/cursor-mcp",
+  "version": "0.2.0",
+  "description": "YAAIF Cursor MCP bridge — auth, skills, MCP deploy, ambient workflows",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "YAAIF / BeezLabs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yaaif/cursor-plugin.git",
+    "directory": "packages/mcp"
+  },
+  "bin": {
+    "yaaif-cursor-mcp": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm test && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "open": "^10.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
