@@ -68,3 +68,15 @@ test("integration ops correlate without seed returns 400 (optional)", async (t) 
   const res = await fetch(`${cfg.agentBaseUrl}/api/ops/correlate`, { headers });
   assert.equal(res.status, 400, await res.text());
 });
+
+test("integration ops telemetry flow-events without request_id returns 400 (optional)", async (t) => {
+  if (process.env.YAAIF_INTEGRATION !== "1") {
+    t.skip("Set YAAIF_INTEGRATION=1 with an authenticated ~/.yaaif/cursor session to run");
+    return;
+  }
+  const cfg = loadConfig();
+  const headers = await sessionHeaders(cfg);
+  const res = await fetch(`${cfg.agentBaseUrl}/api/ops/flow-events`, { headers });
+  // 400 = mounted; 403 = mounted but missing api.metrics.read
+  assert.ok([400, 403].includes(res.status), await res.text());
+});

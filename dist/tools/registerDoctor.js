@@ -123,6 +123,25 @@ export function registerDoctorTools(server, ctx) {
                 add("ops_api", routeOk, { error: msg.slice(0, 240) });
                 void ctx.telemetry.increment(routeOk ? "doctor_ops_api_ok" : "doctor_ops_api_fail");
             }
+            try {
+                // Missing request_id → 400 means telemetry ops proxy is mounted.
+                await ctx.api.agentJSON("GET", "/api/ops/flow-events");
+                add("ops_telemetry", true, { note: "unexpected 200 without request_id" });
+                void ctx.telemetry.increment("doctor_ops_telemetry_ok");
+            }
+            catch (e) {
+                const msg = String(e);
+                const routeOk = /\b400\b/.test(msg) ||
+                    /request_id is required/i.test(msg) ||
+                    /\b403\b/.test(msg); // mounted but missing api.metrics.read
+                add("ops_telemetry", routeOk, {
+                    error: msg.slice(0, 240),
+                    hint: routeOk && /\b403\b/.test(msg)
+                        ? "Route exists; grant api.metrics.read for telemetry drill-down"
+                        : undefined,
+                });
+                void ctx.telemetry.increment(routeOk ? "doctor_ops_telemetry_ok" : "doctor_ops_telemetry_fail");
+            }
         }
         const failed = checks.filter((c) => !c.ok);
         const summary = failed.length
