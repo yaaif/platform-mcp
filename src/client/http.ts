@@ -24,6 +24,14 @@ export class ApiClient {
     return this.doJSON<T>(this.cfg.apiBaseUrl, method, path, body);
   }
 
+  controlPlaneJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.doJSON<T>(this.cfg.controlPlaneBaseUrl, method, path, body);
+  }
+
+  approvalJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.doJSON<T>(this.cfg.approvalBaseUrl, method, path, body);
+  }
+
   private async doJSON<T>(base: string, method: string, path: string, body?: unknown): Promise<T> {
     const { token, session } = await this.auth.accessToken();
     const tenantId = (session.tenant_id || this.cfg.defaultTenantId || "").trim();

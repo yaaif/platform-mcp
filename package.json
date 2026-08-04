@@ -1,7 +1,7 @@
 {
   "name": "@yaaif/cursor-mcp",
-  "version": "0.2.0",
-  "description": "YAAIF Cursor MCP bridge — auth, skills, MCP deploy, ambient workflows",
+  "version": "0.4.0",
+  "description": "YAAIF Cursor MCP bridge — auth, plan, skills, MCP deploy, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
   "author": "YAAIF / BeezLabs",
@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs && npm run bundle",
     "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-cursor-mcp.mjs --packages=bundle",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "node --import tsx --test src/**/*.test.ts src/*.test.ts",
     "start": "node dist/cli.js",
     "prepublishOnly": "npm test && npm run build"
   },

@@ -6,5 +6,7 @@ export declare class ApiClient {
     constructor(cfg: Config, auth: AuthClient);
     agentJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
     apiJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
+    controlPlaneJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
+    approvalJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
     private doJSON;
 }

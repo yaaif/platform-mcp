@@ -4,6 +4,8 @@ export type Config = {
     oidcScopes: string[];
     apiBaseUrl: string;
     agentBaseUrl: string;
+    controlPlaneBaseUrl: string;
+    approvalBaseUrl: string;
     defaultTenantId: string;
     cursorHome: string;
 };

@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { mergeSkillIds } from "../lib/mergeSkillIds.js";
+import { registerDesktopTools } from "./registerDesktop.js";
+import { registerApprovalTools } from "./registerApproval.js";
+import { registerPlanTools } from "./registerPlan.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +13,9 @@ export function registerAllTools(server, ctx) {
     registerSkills(server, ctx);
     registerAmbient(server, ctx);
     registerMcp(server, ctx);
+    registerDesktopTools(server, ctx);
+    registerApprovalTools(server, ctx);
+    registerPlanTools(server, ctx);
 }
 function registerAuth(server, ctx) {
     server.registerTool("yaaif_configure_check", {
@@ -20,24 +27,26 @@ function registerAuth(server, ctx) {
             oidc_authority: ctx.cfg.oidcAuthority,
             api_base: ctx.cfg.apiBaseUrl,
             agent_base: ctx.cfg.agentBaseUrl,
+            control_plane_base: ctx.cfg.controlPlaneBaseUrl,
+            approval_base: ctx.cfg.approvalBaseUrl,
             client_id: ctx.cfg.oidcClientId,
             authenticated: Boolean(sess?.tokens.access_token),
             tenant_id: sess?.tenant_id || ctx.cfg.defaultTenantId || "",
         };
-        try {
-            const healthApi = await fetch(`${ctx.cfg.apiBaseUrl}/health`);
-            out.api_health = healthApi.status;
-        }
-        catch (e) {
-            out.api_health_error = String(e);
-        }
-        try {
-            const healthAgent = await fetch(`${ctx.cfg.agentBaseUrl}/health`);
-            out.agent_health = healthAgent.status;
-        }
-        catch (e) {
-            out.agent_health_error = String(e);
-        }
+        const probe = async (key, url) => {
+            try {
+                out[key] = (await fetch(url)).status;
+            }
+            catch (e) {
+                out[`${key}_error`] = String(e);
+            }
+        };
+        await Promise.all([
+            probe("api_health", `${ctx.cfg.apiBaseUrl}/health`),
+            probe("agent_health", `${ctx.cfg.agentBaseUrl}/health`),
+            probe("control_plane_health", `${ctx.cfg.controlPlaneBaseUrl}/health`),
+            probe("approval_health", `${ctx.cfg.approvalBaseUrl}/health`),
+        ]);
         if (sess?.tokens.access_token) {
             try {
                 out.rbac_me = await ctx.api.apiJSON("GET", "/api/rbac/me");
@@ -280,7 +289,7 @@ function registerSkills(server, ctx) {
         }
     });
     server.registerTool("yaaif_skill_map_agents", {
-        description: "Replace agent→skill mappings (bulk).",
+        description: "Replace agent→skill mappings (bulk). Prefer yaaif_skill_map_agents_merge to avoid wiping existing skills.",
         inputSchema: {
             assignments: z.array(z.object({
                 agent_id: z.string(),
@@ -291,6 +300,36 @@ function registerSkills(server, ctx) {
         try {
             const result = await ctx.api.agentJSON("POST", "/api/agents/skills/bulk", { assignments });
             return ok("Updated agent skill mappings.", { result });
+        }
+        catch (e) {
+            return fail(String(e));
+        }
+    });
+    server.registerTool("yaaif_skill_map_agents_merge", {
+        description: "Merge skill_ids into agents (fetch current mappings, union, then bulk replace). Safe default for plan execution.",
+        inputSchema: {
+            assignments: z.array(z.object({
+                agent_id: z.string(),
+                skill_ids: z.array(z.string()),
+            })),
+        },
+    }, async ({ assignments }) => {
+        try {
+            const merged = [];
+            for (const a of assignments) {
+                const agent = await ctx.api.agentJSON("GET", `/api/agents/${encodeURIComponent(a.agent_id)}`);
+                const skill_ids = mergeSkillIds(agent?.skill_ids, a.skill_ids);
+                merged.push({
+                    agent_id: a.agent_id,
+                    skill_ids,
+                    previous_skill_ids: agent?.skill_ids ?? [],
+                    added_skill_ids: a.skill_ids,
+                });
+            }
+            const result = await ctx.api.agentJSON("POST", "/api/agents/skills/bulk", {
+                assignments: merged.map(({ agent_id, skill_ids }) => ({ agent_id, skill_ids })),
+            });
+            return ok("Merged agent skill mappings.", { merged, result });
         }
         catch (e) {
             return fail(String(e));
@@ -422,6 +461,39 @@ function registerAmbient(server, ctx) {
             body.agent_type = args.agent_type;
         try {
             return ok(`Created agent ${args.name}.`, { agent: await ctx.api.agentJSON("POST", "/api/agents", body) });
+        }
+        catch (e) {
+            return fail(String(e));
+        }
+    });
+    server.registerTool("yaaif_agent_update", {
+        description: "Update an existing agent (PUT). agent_type is immutable — omit it. skill_ids replaces mappings if provided.",
+        inputSchema: {
+            agent_id: z.string(),
+            name: z.string().optional(),
+            description: z.string().optional(),
+            goal_prompt: z.string().optional(),
+            skill_ids: z.array(z.string()).optional(),
+            enabled: z.boolean().optional(),
+        },
+    }, async (args) => {
+        const body = {};
+        if (args.name !== undefined)
+            body.name = args.name;
+        if (args.description !== undefined)
+            body.description = args.description;
+        if (args.goal_prompt !== undefined)
+            body.goal_prompt = args.goal_prompt;
+        if (args.skill_ids !== undefined)
+            body.skill_ids = args.skill_ids;
+        if (args.enabled !== undefined)
+            body.enabled = args.enabled;
+        if (Object.keys(body).length === 0)
+            return fail("No fields to update");
+        try {
+            return ok(`Updated agent ${args.agent_id}.`, {
+                agent: await ctx.api.agentJSON("PUT", `/api/agents/${encodeURIComponent(args.agent_id)}`, body),
+            });
         }
         catch (e) {
             return fail(String(e));

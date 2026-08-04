@@ -17,6 +17,12 @@ export class ApiClient {
     apiJSON(method, path, body) {
         return this.doJSON(this.cfg.apiBaseUrl, method, path, body);
     }
+    controlPlaneJSON(method, path, body) {
+        return this.doJSON(this.cfg.controlPlaneBaseUrl, method, path, body);
+    }
+    approvalJSON(method, path, body) {
+        return this.doJSON(this.cfg.approvalBaseUrl, method, path, body);
+    }
     async doJSON(base, method, path, body) {
         const { token, session } = await this.auth.accessToken();
         const tenantId = (session.tenant_id || this.cfg.defaultTenantId || "").trim();
