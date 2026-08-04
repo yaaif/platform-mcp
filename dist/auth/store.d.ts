@@ -8,9 +8,14 @@ export type TokenSet = {
 export type Session = {
     tokens: TokenSet;
     tenant_id?: string;
+    tenant_name?: string;
     subject?: string;
     email?: string;
     name?: string;
+    /** Named platform profile used when tokens were issued. */
+    profile_id?: string;
+    /** OIDC authority / issuer URL at login time. */
+    oidc_authority?: string;
 };
 export declare class SessionStore {
     readonly path: string;

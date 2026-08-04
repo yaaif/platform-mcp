@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
 import { mergeSkillIds } from "../lib/mergeSkillIds.js";
+import { registerAuthTools } from "./registerAuth.js";
 import { registerDesktopTools } from "./registerDesktop.js";
 import { registerApprovalTools } from "./registerApproval.js";
 import { registerPlanTools } from "./registerPlan.js";
@@ -9,137 +10,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 export function registerAllTools(server, ctx) {
-    registerAuth(server, ctx);
+    registerAuthTools(server, ctx);
     registerSkills(server, ctx);
     registerAmbient(server, ctx);
     registerMcp(server, ctx);
     registerDesktopTools(server, ctx);
     registerApprovalTools(server, ctx);
     registerPlanTools(server, ctx);
-}
-function registerAuth(server, ctx) {
-    server.registerTool("yaaif_configure_check", {
-        description: "Validate plugin env URLs, auth session, and API/agent reachability.",
-        inputSchema: {},
-    }, async () => {
-        const sess = await ctx.auth.session();
-        const out = {
-            oidc_authority: ctx.cfg.oidcAuthority,
-            api_base: ctx.cfg.apiBaseUrl,
-            agent_base: ctx.cfg.agentBaseUrl,
-            control_plane_base: ctx.cfg.controlPlaneBaseUrl,
-            approval_base: ctx.cfg.approvalBaseUrl,
-            client_id: ctx.cfg.oidcClientId,
-            authenticated: Boolean(sess?.tokens.access_token),
-            tenant_id: sess?.tenant_id || ctx.cfg.defaultTenantId || "",
-        };
-        const probe = async (key, url) => {
-            try {
-                out[key] = (await fetch(url)).status;
-            }
-            catch (e) {
-                out[`${key}_error`] = String(e);
-            }
-        };
-        await Promise.all([
-            probe("api_health", `${ctx.cfg.apiBaseUrl}/health`),
-            probe("agent_health", `${ctx.cfg.agentBaseUrl}/health`),
-            probe("control_plane_health", `${ctx.cfg.controlPlaneBaseUrl}/health`),
-            probe("approval_health", `${ctx.cfg.approvalBaseUrl}/health`),
-        ]);
-        if (sess?.tokens.access_token) {
-            try {
-                out.rbac_me = await ctx.api.apiJSON("GET", "/api/rbac/me");
-            }
-            catch (e) {
-                out.rbac_error = String(e);
-            }
-        }
-        return ok("Configuration check complete.", out);
-    });
-    server.registerTool("yaaif_login", {
-        description: "Open browser PKCE login against YAAIF Keycloak and persist tokens.",
-        inputSchema: {},
-    }, async () => {
-        try {
-            const sess = await ctx.auth.login();
-            return ok("Logged in to YAAIF.", {
-                email: sess.email,
-                name: sess.name,
-                subject: sess.subject,
-                tenant_id: sess.tenant_id,
-                expires: sess.tokens.expiry,
-            });
-        }
-        catch (e) {
-            return fail(String(e));
-        }
-    });
-    server.registerTool("yaaif_logout", {
-        description: "Clear the local YAAIF Cursor session.",
-        inputSchema: {},
-    }, async () => {
-        await ctx.auth.logout();
-        return ok("Logged out.", { logged_out: true });
-    });
-    server.registerTool("yaaif_whoami", {
-        description: "Return current auth session, RBAC identity, and active tenant.",
-        inputSchema: {},
-    }, async () => {
-        const sess = await ctx.auth.session();
-        if (!sess?.tokens.access_token)
-            return ok("Not authenticated.", { authenticated: false });
-        let me;
-        let tenants;
-        try {
-            me = await ctx.api.apiJSON("GET", "/api/rbac/me");
-        }
-        catch { /* optional */ }
-        try {
-            tenants = await ctx.api.apiJSON("GET", "/api/users/me/tenants");
-        }
-        catch { /* optional */ }
-        return ok("Authenticated YAAIF session.", {
-            authenticated: true,
-            email: sess.email,
-            name: sess.name,
-            subject: sess.subject,
-            tenant_id: sess.tenant_id || ctx.cfg.defaultTenantId || "",
-            expires: sess.tokens.expiry,
-            rbac_me: me,
-            tenants,
-            api_base: ctx.cfg.apiBaseUrl,
-            agent_base: ctx.cfg.agentBaseUrl,
-        });
-    });
-    server.registerTool("yaaif_list_tenants", {
-        description: "List tenants available to the signed-in user.",
-        inputSchema: {},
-    }, async () => {
-        try {
-            const tenants = await ctx.api.apiJSON("GET", "/api/users/me/tenants");
-            return ok("Listed tenants.", { tenants });
-        }
-        catch (e) {
-            return fail(String(e));
-        }
-    });
-    server.registerTool("yaaif_set_tenant", {
-        description: "Set the active tenant id for subsequent YAAIF API calls.",
-        inputSchema: { tenant_id: z.string() },
-    }, async ({ tenant_id }) => {
-        try {
-            const sess = await ctx.auth.setTenant(tenant_id);
-            try {
-                await ctx.api.apiJSON("POST", "/api/users/me/active-tenant", { tenant_id });
-            }
-            catch { /* best-effort */ }
-            return ok(`Active tenant set to ${tenant_id}.`, { tenant_id: sess.tenant_id, email: sess.email });
-        }
-        catch (e) {
-            return fail(String(e));
-        }
-    });
 }
 function registerSkills(server, ctx) {
     server.registerTool("yaaif_skill_list", {

@@ -1,6 +1,24 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import open from "open";
+export class ReauthRequiredError extends Error {
+    code = "reauth_required";
+    constructor(message) {
+        super(message);
+        this.name = "ReauthRequiredError";
+    }
+}
+export class IssuerMismatchError extends Error {
+    sessionAuthority;
+    configAuthority;
+    code = "issuer_mismatch";
+    constructor(message, sessionAuthority, configAuthority) {
+        super(message);
+        this.sessionAuthority = sessionAuthority;
+        this.configAuthority = configAuthority;
+        this.name = "IssuerMismatchError";
+    }
+}
 function b64url(buf) {
     return buf.toString("base64url");
 }
@@ -34,12 +52,24 @@ function tokenSetFromJson(raw, previousRefresh) {
         id_token: typeof raw.id_token === "string" ? raw.id_token : undefined,
     };
 }
+function normalizeAuthority(v) {
+    return v.replace(/\/+$/, "").toLowerCase();
+}
 export class AuthClient {
     cfg;
     store;
     constructor(cfg, store) {
         this.cfg = cfg;
         this.store = store;
+    }
+    assertIssuerMatch(sess) {
+        if (!sess?.tokens.access_token || !sess.oidc_authority)
+            return;
+        const sessionAuth = normalizeAuthority(sess.oidc_authority);
+        const configAuth = normalizeAuthority(this.cfg.oidcAuthority);
+        if (sessionAuth && configAuth && sessionAuth !== configAuth) {
+            throw new IssuerMismatchError(`session was issued for ${sess.oidc_authority} but config points at ${this.cfg.oidcAuthority}; switch profile or login again`, sess.oidc_authority, this.cfg.oidcAuthority);
+        }
     }
     async login() {
         await this.store.ensureHome(this.cfg.cursorHome);
@@ -50,10 +80,19 @@ export class AuthClient {
         await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
         const port = server.address().port;
         const redirectUri = `http://127.0.0.1:${port}/callback`;
+        const authUrl = new URL(`${this.cfg.oidcAuthority}/protocol/openid-connect/auth`);
+        authUrl.searchParams.set("client_id", this.cfg.oidcClientId);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+        authUrl.searchParams.set("scope", this.cfg.oidcScopes.join(" "));
+        authUrl.searchParams.set("state", state);
+        authUrl.searchParams.set("code_challenge", challenge);
+        authUrl.searchParams.set("code_challenge_method", "S256");
+        const authUrlStr = authUrl.toString();
         const code = await new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 server.close();
-                reject(new Error("login timed out waiting for browser callback"));
+                reject(new Error(`login timed out waiting for browser callback. Open this URL manually: ${authUrlStr}`));
             }, 5 * 60 * 1000);
             server.on("request", (req, res) => {
                 const url = new URL(req.url ?? "/", redirectUri);
@@ -81,24 +120,19 @@ export class AuthClient {
                     reject(new Error("missing authorization code"));
                     return;
                 }
-                res.writeHead(200, { "Content-Type": "text/html" });
-                res.end("<html><body><h2>YAAIF login complete</h2><p>You can close this window.</p></body></html>");
+                res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+                res.end(`<!doctype html><html><body style="font-family:system-ui;padding:2rem">
+<h2>YAAIF login complete</h2>
+<p>Signed in to <code>${this.cfg.oidcAuthority}</code>.</p>
+<p>You can close this window and return to Cursor.</p>
+</body></html>`);
                 clearTimeout(timer);
                 resolve(authCode);
                 server.close();
             });
-            const authUrl = new URL(`${this.cfg.oidcAuthority}/protocol/openid-connect/auth`);
-            authUrl.searchParams.set("client_id", this.cfg.oidcClientId);
-            authUrl.searchParams.set("response_type", "code");
-            authUrl.searchParams.set("redirect_uri", redirectUri);
-            authUrl.searchParams.set("scope", this.cfg.oidcScopes.join(" "));
-            authUrl.searchParams.set("state", state);
-            authUrl.searchParams.set("code_challenge", challenge);
-            authUrl.searchParams.set("code_challenge_method", "S256");
-            void open(authUrl.toString()).catch((e) => {
-                clearTimeout(timer);
-                server.close();
-                reject(e);
+            void open(authUrlStr).catch((e) => {
+                // Keep listening — user can open the URL manually.
+                console.error(`Failed to open browser (${String(e)}). Open this URL: ${authUrlStr}`);
             });
         });
         const body = new URLSearchParams({
@@ -125,44 +159,68 @@ export class AuthClient {
             email: claims.email,
             name: claims.name,
             tenant_id: this.cfg.defaultTenantId || undefined,
+            profile_id: this.cfg.activeProfileId || undefined,
+            oidc_authority: this.cfg.oidcAuthority,
         };
         await this.store.save(session);
-        return session;
+        return { session, auth_url: authUrlStr };
     }
-    async logout() {
+    async logout(opts = {}) {
+        const sess = await this.store.load();
+        let end_session_url;
+        if (opts.endSession && sess?.tokens.id_token && sess.oidc_authority) {
+            const u = new URL(`${sess.oidc_authority}/protocol/openid-connect/logout`);
+            u.searchParams.set("id_token_hint", sess.tokens.id_token);
+            end_session_url = u.toString();
+            void open(end_session_url).catch(() => { });
+        }
         await this.store.clear();
+        return { logged_out: true, end_session_url };
     }
     async session() {
         return this.store.load();
     }
-    async setTenant(tenantId) {
+    async setTenant(tenantId, tenantName) {
         const sess = await this.store.load();
         if (!sess?.tokens.access_token)
-            throw new Error("not authenticated; call yaaif_login first");
+            throw new ReauthRequiredError("not authenticated; call yaaif_login first");
+        this.assertIssuerMatch(sess);
         sess.tenant_id = tenantId.trim();
+        if (tenantName)
+            sess.tenant_name = tenantName.trim();
         await this.store.save(sess);
         return sess;
     }
     async accessToken() {
         let sess = await this.store.load();
         if (!sess?.tokens.access_token)
-            throw new Error("not authenticated; call yaaif_login first");
+            throw new ReauthRequiredError("not authenticated; call yaaif_login first");
+        this.assertIssuerMatch(sess);
         const expiry = Date.parse(sess.tokens.expiry);
         if (Number.isFinite(expiry) && expiry - Date.now() > 45_000) {
             return { token: sess.tokens.access_token, session: sess };
         }
-        if (!sess.tokens.refresh_token)
-            throw new Error("access token expired; call yaaif_login again");
-        sess = await this.refresh(sess);
+        if (!sess.tokens.refresh_token) {
+            await this.store.clear();
+            throw new ReauthRequiredError("access token expired and no refresh token; call yaaif_login again");
+        }
+        try {
+            sess = await this.refresh(sess);
+        }
+        catch (e) {
+            await this.store.clear();
+            throw new ReauthRequiredError(`token refresh failed; call yaaif_login again (${String(e)})`);
+        }
         return { token: sess.tokens.access_token, session: sess };
     }
     async refresh(sess) {
+        const authority = sess.oidc_authority || this.cfg.oidcAuthority;
         const body = new URLSearchParams({
             grant_type: "refresh_token",
             refresh_token: sess.tokens.refresh_token ?? "",
             client_id: this.cfg.oidcClientId,
         });
-        const tokenRes = await fetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
+        const tokenRes = await fetch(`${authority}/protocol/openid-connect/token`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body,
@@ -178,6 +236,8 @@ export class AuthClient {
             sess.email = claims.email ?? sess.email;
             sess.name = claims.name ?? sess.name;
         }
+        sess.oidc_authority = authority;
+        sess.profile_id = this.cfg.activeProfileId || sess.profile_id;
         await this.store.save(sess);
         return sess;
     }

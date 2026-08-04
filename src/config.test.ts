@@ -16,6 +16,7 @@ test("loadConfig reads env defaults", () => {
   assert.equal(cfg.controlPlaneBaseUrl, "https://example.com/cp");
   assert.equal(cfg.approvalBaseUrl, "https://example.com/appr");
   assert.equal(cfg.oidcClientId, "yaaif-cursor");
+  assert.equal(cfg.activeProfileId, "");
 });
 
 test("loadConfig ignores unexpanded plugin placeholders", () => {

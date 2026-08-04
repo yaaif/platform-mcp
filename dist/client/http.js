@@ -24,10 +24,21 @@ export class ApiClient {
         return this.doJSON(this.cfg.approvalBaseUrl, method, path, body);
     }
     async doJSON(base, method, path, body) {
-        const { token, session } = await this.auth.accessToken();
+        let token;
+        let session;
+        try {
+            ({ token, session } = await this.auth.accessToken());
+        }
+        catch (e) {
+            const msg = String(e);
+            if (msg.includes("reauth_required") || msg.includes("issuer_mismatch") || msg.includes("not authenticated")) {
+                throw e;
+            }
+            throw e;
+        }
         const tenantId = (session.tenant_id || this.cfg.defaultTenantId || "").trim();
         if (!tenantId && !isTenantBootstrapPath(path)) {
-            throw new Error("tenant not set; call yaaif_set_tenant or set YAAIF_DEFAULT_TENANT_ID");
+            throw new Error("tenant not set; call yaaif_set_tenant (name/slug/uuid) or yaaif_ensure_session");
         }
         const headers = {
             Authorization: `Bearer ${token}`,

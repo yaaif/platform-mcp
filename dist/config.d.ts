@@ -8,5 +8,7 @@ export type Config = {
     approvalBaseUrl: string;
     defaultTenantId: string;
     cursorHome: string;
+    /** Active named profile id (hosted | local-hybrid | local | custom). */
+    activeProfileId: string;
 };
 export declare function loadConfig(): Config;

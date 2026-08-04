@@ -1,5 +1,11 @@
 import type { AuthClient } from "../auth/oidc.js";
 import type { ApiClient } from "../client/http.js";
 import type { Config } from "../config.js";
+import type { ProfileStore } from "../platform/profiles.js";
 
-export type Ctx = { cfg: Config; auth: AuthClient; api: ApiClient };
+export type Ctx = {
+  cfg: Config;
+  auth: AuthClient;
+  api: ApiClient;
+  profiles: ProfileStore;
+};

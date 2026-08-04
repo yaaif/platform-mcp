@@ -11,6 +11,8 @@ export type Config = {
   approvalBaseUrl: string;
   defaultTenantId: string;
   cursorHome: string;
+  /** Active named profile id (hosted | local-hybrid | local | custom). */
+  activeProfileId: string;
 };
 
 function trimSlash(v: string): string {
@@ -41,5 +43,6 @@ export function loadConfig(): Config {
     approvalBaseUrl: trimSlash(env("YAAIF_APPROVAL_BASE_URL", `${apiBaseUrl}/approval-service`)),
     defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
     cursorHome: env("YAAIF_CURSOR_HOME", join(homedir(), ".yaaif", "cursor")),
+    activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),
   };
 }

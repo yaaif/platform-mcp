@@ -25,5 +25,6 @@ export function loadConfig() {
         approvalBaseUrl: trimSlash(env("YAAIF_APPROVAL_BASE_URL", `${apiBaseUrl}/approval-service`)),
         defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
         cursorHome: env("YAAIF_CURSOR_HOME", join(homedir(), ".yaaif", "cursor")),
+        activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),
     };
 }

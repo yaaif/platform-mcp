@@ -7,10 +7,10 @@ export function ok(summary: string, data?: unknown): CallToolResult {
   };
 }
 
-export function fail(message: string): CallToolResult {
+export function fail(message: string, data?: Record<string, unknown>): CallToolResult {
   return {
     content: [{ type: "text", text: message }],
     isError: true,
-    structuredContent: { error: message },
+    structuredContent: { error: message, ...(data ?? {}) },
   };
 }
