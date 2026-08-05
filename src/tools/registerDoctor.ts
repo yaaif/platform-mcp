@@ -120,6 +120,34 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
         void ctx.telemetry.increment("doctor_local_tools_smoke_fail");
       }
       try {
+        const lifecycle = await ctx.api.agentJSON<{
+          strict?: boolean;
+          readiness?: {
+            ready?: boolean;
+            record_sink_wired?: boolean;
+            grant_backend_wired?: boolean;
+            share_links_enabled?: boolean;
+            warnings?: string[];
+          };
+        }>("GET", "/api/file-attachments/registry-lifecycle");
+        const ready = Boolean(lifecycle?.readiness?.ready ?? lifecycle?.readiness?.record_sink_wired);
+        add("file_registry", ready, {
+          strict: lifecycle?.strict,
+          readiness: lifecycle?.readiness,
+        });
+        void ctx.telemetry.increment(ready ? "doctor_file_registry_ok" : "doctor_file_registry_fail");
+      } catch (e) {
+        const msg = String(e);
+        const authDenied = /\b403\b/.test(msg);
+        add("file_registry", authDenied, {
+          error: msg.slice(0, 240),
+          hint: authDenied
+            ? "Route exists; grant agent LLM models read for registry lifecycle"
+            : "Ensure agent-service exposes GET /api/file-attachments/registry-lifecycle",
+        });
+        void ctx.telemetry.increment(authDenied ? "doctor_file_registry_ok" : "doctor_file_registry_fail");
+      }
+      try {
         // Missing seed → 400 means the RO ops route is mounted.
         await ctx.api.agentJSON("GET", "/api/ops/correlate");
         add("ops_api", true, { note: "unexpected 200 without seed" });
