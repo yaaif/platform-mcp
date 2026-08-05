@@ -1,6 +1,6 @@
 # @yaaif/cursor-mcp
 
-Stdio MCP bridge used by the [YAAIF Cursor plugin](https://github.com/yaaif/cursor-plugin).
+Stdio MCP bridge used by the [YAA\F Cursor plugin](https://github.com/yaaif/cursor-plugin).
 
 ```bash
 npm install

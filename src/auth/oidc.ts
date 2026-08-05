@@ -139,7 +139,7 @@ export class AuthClient {
         }
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(`<!doctype html><html><body style="font-family:system-ui;padding:2rem">
-<h2>YAAIF login complete</h2>
+<h2>YAA\\F login complete</h2>
 <p>Signed in to <code>${this.cfg.oidcAuthority}</code>.</p>
 <p>You can close this window and return to Cursor.</p>
 </body></html>`);

@@ -1,10 +1,10 @@
 {
   "name": "@yaaif/cursor-mcp",
   "version": "0.10.2",
-  "description": "YAAIF Cursor MCP bridge — ops support, local tools, profiles, auth, doctor, plan, skills, MCP, ambient, desktop, approvals",
+  "description": "YAA\\F Cursor MCP bridge — ops support, local tools, profiles, auth, doctor, plan, skills, MCP, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
-  "author": "YAAIF / BeezLabs",
+  "author": "YAA\\F / BeezLabs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yaaif/cursor-plugin.git",

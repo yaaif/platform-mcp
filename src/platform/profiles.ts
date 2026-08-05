@@ -44,7 +44,7 @@ export const BUILTIN_PROFILES: PlatformProfile[] = [
   {
     id: "hosted",
     label: "Hosted (platform.yaaif.ai)",
-    description: "Production / hosted YAAIF — OIDC and APIs on platform.yaaif.ai",
+    description: "Production / hosted YAA\\F — OIDC and APIs on platform.yaaif.ai",
     builtin: true,
     oidc_authority: "https://platform.yaaif.ai/auth/realms/yaaif",
     ...deriveServiceUrls("https://platform.yaaif.ai"),
