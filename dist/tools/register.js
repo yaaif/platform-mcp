@@ -103,7 +103,7 @@ function registerSkills(server, ctx) {
         }
     });
     server.registerTool("yaaif_skill_create", {
-        description: "Create a skill pack in YAAIF (writes SKILL.md + skill_configs).",
+        description: "Create a skill pack in YAA\\F (writes SKILL.md + skill_configs).",
         inputSchema: {
             id: z.string(),
             description: z.string(),
@@ -599,7 +599,7 @@ function registerAmbient(server, ctx) {
 }
 function registerMcp(server, ctx) {
     server.registerTool("yaaif_mcp_scaffold", {
-        description: "Scaffold a new MCP server from official YAAIF templates into the workspace.",
+        description: "Scaffold a new MCP server from official YAA\\F templates into the workspace.",
         inputSchema: {
             name: z.string(),
             language: z.enum(["go", "python"]).optional(),
