@@ -11,6 +11,8 @@ import { registerOpsTools } from "./registerOps.js";
 import { registerDoctorTools } from "./registerDoctor.js";
 import { registerLocalTools } from "./registerLocalTools.js";
 import { registerOpsSupportTools } from "./registerOpsSupport.js";
+import { registerApiKeyTools } from "./registerApiKeys.js";
+import { registerMcpDeploymentTools } from "./registerMcpDeployments.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +25,8 @@ export function registerAllTools(server: McpServer, ctx: Ctx): void {
   registerSkills(server, ctx);
   registerAmbient(server, ctx);
   registerMcp(server, ctx);
+  registerMcpDeploymentTools(server, ctx);
+  registerApiKeyTools(server, ctx);
   registerDesktopTools(server, ctx);
   registerApprovalTools(server, ctx);
   registerPlanTools(server, ctx);
@@ -584,96 +588,13 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
         language: lang,
         template: repo,
         next_steps: [
+          "yaaif_deployment_settings_status (confirm method / gitops health)",
           "Implement tools from contracts",
           "Build and push container image",
           "Call yaaif_mcp_deployment_create + deploy + register",
+          "If the MCP calls platform APIs: yaaif_api_key_create + yaaif_api_key_bind_deployment",
         ],
       });
-    } catch (e) { return fail(String(e)); }
-  });
-
-  server.registerTool("yaaif_mcp_deployment_create", {
-    description: "Create an MCP deployment record (api-server → deployment-service).",
-    inputSchema: {
-      name: z.string(),
-      image: z.string(),
-      deployment_method: z.enum(["docker_compose", "kubernetes_gitops"]).optional(),
-      container_port: z.number().optional(),
-      mcp_path: z.string().optional(),
-      endpoint_mode: z.string().optional(),
-      endpoint_host: z.string().optional(),
-      transport_type: z.string().optional(),
-      env: z.record(z.string()).optional(),
-      auto_register: z.boolean().optional(),
-      auto_import_tools: z.boolean().optional(),
-      registry_credential_id: z.string().optional(),
-    },
-  }, async (args) => {
-    const body: Record<string, unknown> = {
-      name: args.name,
-      image: args.image,
-      deployment_method: args.deployment_method || "docker_compose",
-      container_port: args.container_port ?? 8080,
-      mcp_path: args.mcp_path || "/mcp",
-      endpoint_mode: args.endpoint_mode || "docker_name",
-      transport_type: args.transport_type || "HTTP",
-      env: args.env ?? {},
-      secret_env: [],
-      client_secret_headers: [],
-      auto_register: args.auto_register ?? true,
-      auto_import_tools: args.auto_import_tools ?? true,
-    };
-    if (args.endpoint_host) body.endpoint_host = args.endpoint_host;
-    if (args.registry_credential_id) body.registry_credential_id = args.registry_credential_id;
-    try {
-      return ok(`Created MCP deployment ${args.name}.`, {
-        deployment: await ctx.api.apiJSON("POST", "/api/mcp-deployments", body),
-      });
-    } catch (e) { return fail(String(e)); }
-  });
-
-  server.registerTool("yaaif_mcp_deployment_deploy", {
-    description: "Deploy an MCP deployment by id.",
-    inputSchema: { deployment_id: z.string() },
-  }, async ({ deployment_id }) => {
-    try {
-      return ok("Deploy started/updated.", {
-        deployment: await ctx.api.apiJSON("POST", `/api/mcp-deployments/${encodeURIComponent(deployment_id)}/deploy`, {}),
-      });
-    } catch (e) { return fail(String(e)); }
-  });
-
-  server.registerTool("yaaif_mcp_deployment_register", {
-    description: "Register a deployed MCP server into the agent-service tool catalog.",
-    inputSchema: { deployment_id: z.string() },
-  }, async ({ deployment_id }) => {
-    try {
-      return ok("Registered MCP deployment into catalog.", {
-        deployment: await ctx.api.apiJSON("POST", `/api/mcp-deployments/${encodeURIComponent(deployment_id)}/register`, {}),
-      });
-    } catch (e) { return fail(String(e)); }
-  });
-
-  server.registerTool("yaaif_mcp_deployment_status", {
-    description: "Get MCP deployment status by id.",
-    inputSchema: { deployment_id: z.string() },
-  }, async ({ deployment_id }) => {
-    try {
-      return ok("Fetched MCP deployment.", {
-        deployment: await ctx.api.apiJSON("GET", `/api/mcp-deployments/${encodeURIComponent(deployment_id)}`),
-      });
-    } catch (e) { return fail(String(e)); }
-  });
-
-  server.registerTool("yaaif_mcp_deployment_logs", {
-    description: "Fetch MCP deployment logs.",
-    inputSchema: { deployment_id: z.string(), tail: z.number().optional() },
-  }, async ({ deployment_id, tail }) => {
-    const params = new URLSearchParams();
-    if (tail) params.set("tail", String(tail));
-    const path = `/api/mcp-deployments/${encodeURIComponent(deployment_id)}/logs${params.size ? `?${params}` : ""}`;
-    try {
-      return ok("Fetched MCP deployment logs.", { logs: await ctx.api.apiJSON("GET", path) });
     } catch (e) { return fail(String(e)); }
   });
 
@@ -696,7 +617,7 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
       name: args.name,
       description: args.description ?? "",
       endpoint: args.endpoint,
-      transport_type: args.transport_type || "HTTP",
+      transport_type: args.transport_type || "STREAMABLE_HTTP",
       remote_tool_name: args.remote_tool_name || args.name,
       enabled: args.enabled ?? true,
       timeout_seconds: args.timeout_seconds ?? 60,
@@ -772,22 +693,9 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
     } catch (e) { return fail(String(e)); }
   });
 
-  server.registerTool("yaaif_mcp_deployments_list", {
-    description: "List MCP deployments (api-server / deployment-service).",
-    inputSchema: { q: z.string().optional(), limit: z.number().optional() },
-  }, async ({ q, limit }) => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (limit) params.set("limit", String(limit));
-    const path = `/api/mcp-deployments${params.size ? `?${params}` : ""}`;
-    try {
-      return ok("Listed MCP deployments.", { result: await ctx.api.apiJSON("GET", path) });
-    } catch (e) { return fail(String(e)); }
-  });
-
   server.registerTool("yaaif_catalog_overview", {
     description:
-      "Read-only snapshot of the current tenant: agents, skills, MCP tools/servers/deployments, ambient agents/workflows (paginated summaries).",
+      "Read-only snapshot of the current tenant: agents, skills, MCP tools/servers/deployments, API keys, deployment settings status, ambient agents/workflows (paginated summaries).",
     inputSchema: {
       q: z.string().optional(),
       limit: z.number().optional(),
@@ -812,6 +720,8 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
       load("mcp_tools", () => ctx.api.agentJSON("GET", `/api/mcp-tools${qs}`)),
       load("mcp_servers", () => ctx.api.agentJSON("GET", `/api/mcp-tools/servers${qs}`)),
       load("mcp_deployments", () => ctx.api.apiJSON("GET", `/api/mcp-deployments${qs}`)),
+      load("api_keys", () => ctx.api.apiJSON("GET", "/api/mcp-platform-keys")),
+      load("deployment_settings_status", () => ctx.api.apiJSON("GET", "/api/deployment-settings/status")),
       load("ambient_agents", () => ctx.api.agentJSON("GET", `/api/ambient/agents${qs}`)),
       load("ambient_workflows", () => ctx.api.agentJSON("GET", `/api/ambient/workflows${qs}`)),
       load("local_tools", () => ctx.api.agentJSON("GET", "/api/local-tools")),

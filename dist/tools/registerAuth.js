@@ -120,7 +120,7 @@ function errPayload(e) {
 }
 export function registerAuthTools(server, ctx) {
     server.registerTool("yaaif_platform_list", {
-        description: "List builtin and custom YAAIF platform profiles (hosted, local-hybrid, local, …).",
+        description: "List builtin and custom YAA\\F platform profiles (hosted, local-hybrid, local, …).",
         inputSchema: {},
     }, async () => {
         const active = await ctx.profiles.getActive();
@@ -300,7 +300,7 @@ export function registerAuthTools(server, ctx) {
                 tenant = { auto_select_error: String(e) };
             }
             void ctx.telemetry.increment("login_ok");
-            return ok("Logged in to YAAIF.", {
+            return ok("Logged in to YAA\\F.", {
                 email: session.email,
                 name: session.name,
                 subject: session.subject,
@@ -348,7 +348,7 @@ export function registerAuthTools(server, ctx) {
         }
     });
     server.registerTool("yaaif_logout", {
-        description: "Clear the local YAAIF Cursor session. Optionally open Keycloak end_session.",
+        description: "Clear the local YAA\\F Cursor session. Optionally open Keycloak end_session.",
         inputSchema: { end_session: z.boolean().optional() },
     }, async ({ end_session }) => {
         const result = await ctx.auth.logout({ endSession: Boolean(end_session) });
@@ -391,7 +391,7 @@ export function registerAuthTools(server, ctx) {
         const selected = Array.isArray(tenantsNorm)
             ? tenantsNorm.find((t) => t.is_selected)
             : undefined;
-        return ok("Authenticated YAAIF session.", {
+        return ok("Authenticated YAA\\F session.", {
             authenticated: true,
             email: sess.email,
             name: sess.name,
