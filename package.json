@@ -1,7 +1,7 @@
 {
   "name": "@yaaif/cursor-mcp",
-  "version": "0.10.2",
-  "description": "YAA\\F Cursor MCP bridge — ops support, local tools, profiles, auth, doctor, plan, skills, MCP, ambient, desktop, approvals",
+  "version": "0.12.0",
+  "description": "YAA\\F Cursor MCP bridge — ops support, local tools, profiles, auth, doctor, plan, skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
   "author": "YAA\\F / BeezLabs",
