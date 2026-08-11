@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { IssuerMismatchError, ReauthRequiredError } from "../auth/oidc.js";
-import { installTlsDispatcher, yaaifFetch } from "../client/tls.js";
+import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { exportProfileEnv } from "../lib/profileExport.js";
 import { applyProfileToConfig, inferProfileId, } from "../platform/profiles.js";
 import { normalizeTenants, parseLastTenantId, parseTenantMemberships, resolveTenant, } from "../platform/tenants.js";
@@ -470,21 +470,50 @@ export function registerAuthTools(server, ctx) {
         },
     }, async ({ login_if_needed, tenant, profile_id }) => {
         try {
+            let profile_auto_switched;
             if (profile_id) {
                 const profile = await ctx.profiles.get(profile_id);
                 if (!profile)
                     return fail(`unknown profile: ${profile_id}`);
                 await ctx.profiles.setActive(profile.id);
                 applyProfileToConfig(ctx.cfg, profile);
+                installTlsDispatcher(ctx.cfg);
+            }
+            else {
+                // Session often comes from hosted/.com while active profile is `local` (all .local).
+                // Prefer local-hybrid so OIDC matches without forcing re-login.
+                const sessPeek = await ctx.auth.session();
+                const sessionAuth = (sessPeek?.oidc_authority || "").replace(/\/+$/, "").toLowerCase();
+                const wantsComOidc = sessionAuth.includes("platform.yaaif.com");
+                const activeIsLocalAll = (ctx.cfg.activeProfileId || inferProfileId(ctx.cfg)) === "local";
+                if (wantsComOidc && activeIsLocalAll) {
+                    const hybrid = await ctx.profiles.get("local-hybrid");
+                    if (hybrid) {
+                        await ctx.profiles.setActive(hybrid.id);
+                        applyProfileToConfig(ctx.cfg, hybrid);
+                        installTlsDispatcher(ctx.cfg);
+                        profile_auto_switched = "local-hybrid";
+                    }
+                }
+                else {
+                    installTlsDispatcher(ctx.cfg);
+                }
             }
             let oidc;
             try {
                 oidc = await probeOidc(ctx.cfg.oidcAuthority);
             }
             catch (e) {
+                const tls = getTlsResolveInfo();
                 return fail(`OIDC discovery failed for ${ctx.cfg.oidcAuthority}: ${String(e)}`, {
                     profile_id: ctx.cfg.activeProfileId,
                     oidc_authority: ctx.cfg.oidcAuthority,
+                    ca_source: tls.ca_source,
+                    ca_file: tls.ca_file,
+                    hint: tls.local_dev_hosts && tls.ca_source === "none"
+                        ? "Install mkcert (mkcert -install) or set YAAIF_EXTRA_CA_FILE to rootCA.pem"
+                        : undefined,
+                    profile_auto_switched,
                 });
             }
             let sess = await ctx.auth.session();
@@ -544,8 +573,10 @@ export function registerAuthTools(server, ctx) {
                     logged_in,
                     auth_url,
                     profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+                    profile_auto_switched,
                     oidc_authority: ctx.cfg.oidcAuthority,
                     api_base: ctx.cfg.apiBaseUrl,
+                    ca_source: getTlsResolveInfo().ca_source,
                     email: set.session.email,
                     tenant_id: set.tenant.tenant_id,
                     tenant_name: set.tenant.tenant_name,
@@ -562,6 +593,7 @@ export function registerAuthTools(server, ctx) {
                     logged_in,
                     auth_url,
                     profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+                    profile_auto_switched,
                     oidc_authority: ctx.cfg.oidcAuthority,
                     tenants: auto.tenants,
                     last_tenant_id: auto.last_tenant_id,
@@ -575,8 +607,10 @@ export function registerAuthTools(server, ctx) {
                 logged_in,
                 auth_url,
                 profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+                profile_auto_switched,
                 oidc_authority: ctx.cfg.oidcAuthority,
                 api_base: ctx.cfg.apiBaseUrl,
+                ca_source: getTlsResolveInfo().ca_source,
                 email: auto.session?.email,
                 tenant_id: auto.tenant_id,
                 tenant_name: auto.tenant_name,

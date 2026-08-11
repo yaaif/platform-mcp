@@ -1,6 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import tls from "node:tls";
 import type { Config } from "../config.js";
 
@@ -10,7 +13,24 @@ export type TlsMaterial = {
   key?: string;
 };
 
+export type TlsResolveInfo = {
+  /** Absolute path actually loaded into the HTTPS agent (if any). */
+  ca_file: string | null;
+  /** How the CA was chosen. */
+  ca_source: "explicit" | "mkcert-auto" | "none";
+  /** True when config URLs target *.yaaif.local (local Traefik / mkcert). */
+  local_dev_hosts: boolean;
+  /** Candidate mkcert paths that exist on disk (for doctor hints). */
+  mkcert_candidates: string[];
+};
+
 let material: TlsMaterial = {};
+let resolveInfo: TlsResolveInfo = {
+  ca_file: null,
+  ca_source: "none",
+  local_dev_hosts: false,
+  mkcert_candidates: [],
+};
 
 function readOptional(path: string | undefined): string | undefined {
   const p = (path || "").trim();
@@ -18,20 +38,166 @@ function readOptional(path: string | undefined): string | undefined {
   return readFileSync(p, "utf8");
 }
 
-/** Load CA / client cert material for subsequent yaaifFetch calls. */
+/** Ignore empty values and unexpanded Cursor plugin placeholders like `${YAAIF_EXTRA_CA_FILE}`. */
+export function resolvedPath(raw: string | undefined | null): string {
+  const v = (raw ?? "").trim();
+  if (!v || /^\$\{[A-Z0-9_]+\}$/.test(v)) return "";
+  return v;
+}
+
+function hostFromUrl(raw: string): string {
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/** Local Traefik / mkcert hosts used by builtin `local` and `local-hybrid` profiles. */
+export function configUsesLocalDevHosts(cfg: Config): boolean {
+  const hosts = [
+    cfg.apiBaseUrl,
+    cfg.agentBaseUrl,
+    cfg.controlPlaneBaseUrl,
+    cfg.approvalBaseUrl,
+    cfg.oidcAuthority,
+  ].map(hostFromUrl);
+  return hosts.some((h) => h === "yaaif.local" || h.endsWith(".yaaif.local"));
+}
+
+function mkcertCarootFromCli(): string | undefined {
+  try {
+    const out = execFileSync("mkcert", ["-CAROOT"], {
+      encoding: "utf8",
+      timeout: 1500,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return out || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Discover mkcert root CA paths (macOS / Linux / CAROOT / `mkcert -CAROOT`).
+ * Node does not trust the system keychain by default, so local Traefik mkcert
+ * certs need this PEM even after `mkcert -install`.
+ */
+export function discoverMkcertCaCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+  const out: string[] = [];
+  const push = (p: string | undefined) => {
+    const path = (p || "").trim();
+    if (!path || out.includes(path)) return;
+    out.push(path);
+  };
+
+  const caroot = (env.CAROOT || "").trim();
+  if (caroot) push(join(caroot, "rootCA.pem"));
+
+  const home = homedir();
+  push(join(home, "Library", "Application Support", "mkcert", "rootCA.pem"));
+  push(join(home, ".local", "share", "mkcert", "rootCA.pem"));
+
+  const cliRoot = mkcertCarootFromCli();
+  if (cliRoot) push(join(cliRoot, "rootCA.pem"));
+
+  return out.filter((p) => existsSync(p));
+}
+
+export function resolveCaFile(cfg: Config, env: NodeJS.ProcessEnv = process.env): TlsResolveInfo {
+  const localDev = configUsesLocalDevHosts(cfg);
+  const candidates = localDev ? discoverMkcertCaCandidates(env) : [];
+  const explicit = resolvedPath(cfg.extraCaFile)
+    || resolvedPath(env.YAAIF_EXTRA_CA_FILE)
+    || resolvedPath(env.NODE_EXTRA_CA_CERTS);
+
+  if (explicit) {
+    return {
+      ca_file: explicit,
+      ca_source: "explicit",
+      local_dev_hosts: localDev,
+      mkcert_candidates: candidates,
+    };
+  }
+
+  if (localDev && candidates.length > 0) {
+    return {
+      ca_file: candidates[0]!,
+      ca_source: "mkcert-auto",
+      local_dev_hosts: localDev,
+      mkcert_candidates: candidates,
+    };
+  }
+
+  return {
+    ca_file: null,
+    ca_source: "none",
+    local_dev_hosts: localDev,
+    mkcert_candidates: candidates,
+  };
+}
+
+/**
+ * Load CA / client cert material for subsequent yaaifFetch calls.
+ *
+ * For `*.yaaif.local`, always merge the mkcert root CA when present — even if
+ * `YAAIF_EXTRA_CA_FILE` / `NODE_EXTRA_CA_CERTS` already set an explicit CA —
+ * so Cursor plugin vars or a corporate bundle cannot shadow Traefik trust.
+ */
 export function installTlsDispatcher(cfg: Config): TlsMaterial | null {
-  const caFile = cfg.extraCaFile || process.env.YAAIF_EXTRA_CA_FILE || process.env.NODE_EXTRA_CA_CERTS;
-  const certFile = cfg.clientCertFile || process.env.YAAIF_CLIENT_CERT_FILE;
-  const keyFile = cfg.clientKeyFile || process.env.YAAIF_CLIENT_KEY_FILE;
-  const caPem = readOptional(caFile);
+  const resolved = resolveCaFile(cfg);
+  resolveInfo = resolved;
+
+  const certFile = resolvedPath(cfg.clientCertFile) || resolvedPath(process.env.YAAIF_CLIENT_CERT_FILE);
+  const keyFile = resolvedPath(cfg.clientKeyFile) || resolvedPath(process.env.YAAIF_CLIENT_KEY_FILE);
+  const caPems: string[] = [];
+  const loadedFiles: string[] = [];
+  const pushFile = (path: string | undefined, required: boolean) => {
+    const p = resolvedPath(path);
+    if (!p || loadedFiles.includes(p)) return;
+    try {
+      const pem = readOptional(p);
+      if (!pem?.trim()) return;
+      if (!caPems.includes(pem)) caPems.push(pem);
+      loadedFiles.push(p);
+    } catch (err) {
+      if (required) throw err;
+    }
+  };
+
+  pushFile(resolved.ca_file || undefined, resolved.ca_source === "explicit");
+
+  if (resolved.local_dev_hosts) {
+    const mkcertPaths = resolved.mkcert_candidates.length
+      ? resolved.mkcert_candidates
+      : discoverMkcertCaCandidates();
+    for (const candidate of mkcertPaths) {
+      pushFile(candidate, false);
+    }
+    if (!resolveInfo.ca_file && loadedFiles[0]) {
+      resolveInfo = {
+        ...resolveInfo,
+        ca_file: loadedFiles[0]!,
+        ca_source: resolveInfo.ca_source === "explicit" ? "explicit" : "mkcert-auto",
+        mkcert_candidates: mkcertPaths,
+      };
+    } else if (resolved.mkcert_candidates.length === 0 && mkcertPaths.length > 0) {
+      resolveInfo = { ...resolveInfo, mkcert_candidates: mkcertPaths };
+    }
+  }
+
+  if (!caPems.length && resolved.ca_source === "mkcert-auto") {
+    resolveInfo = { ...resolved, ca_file: null, ca_source: "none" };
+  }
+
   const certPem = readOptional(certFile);
   const keyPem = readOptional(keyFile);
-  if (!caPem && !certPem) {
+  if (!caPems.length && !certPem) {
     material = {};
     return null;
   }
   material = {
-    ca: caPem ? [...tls.rootCertificates, caPem] : undefined,
+    ca: caPems.length ? [...tls.rootCertificates, ...caPems] : undefined,
     cert: certPem && keyPem ? certPem : undefined,
     key: certPem && keyPem ? keyPem : undefined,
   };
@@ -40,6 +206,10 @@ export function installTlsDispatcher(cfg: Config): TlsMaterial | null {
 
 export function getTlsMaterial(): TlsMaterial {
   return material;
+}
+
+export function getTlsResolveInfo(): TlsResolveInfo {
+  return resolveInfo;
 }
 
 /** fetch()-compatible helper that applies optional extra CA / client mTLS. */

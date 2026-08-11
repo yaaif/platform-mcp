@@ -1,10 +1,24 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { yaaifFetch } from "../client/tls.js";
+import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+
+function tlsHint(err: unknown, tls = getTlsResolveInfo()): string | undefined {
+  const msg = String(err);
+  if (!/certificate|UNABLE_TO_VERIFY|unable to verify|self[- ]signed|CERT_HAS_EXPIRED/i.test(msg)) {
+    return undefined;
+  }
+  if (tls.local_dev_hosts && tls.ca_source === "none") {
+    return "Local *.yaaif.local TLS failed and no mkcert CA was found. Install mkcert (mkcert -install) or set YAAIF_EXTRA_CA_FILE / profile extra_ca_file to the Traefik/mkcert rootCA.pem.";
+  }
+  if (tls.local_dev_hosts && tls.ca_source === "mkcert-auto") {
+    return `Local TLS still failing with auto mkcert CA (${tls.ca_file}). Confirm Traefik certs were issued by that CA, or set YAAIF_EXTRA_CA_FILE explicitly.`;
+  }
+  return "TLS verify failed. Set YAAIF_EXTRA_CA_FILE (or profile extra_ca_file) to your corporate/Traefik CA PEM.";
+}
 
 export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
   server.registerTool("yaaif_doctor", {
@@ -19,13 +33,33 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
       checks.push({ name, ok: okFlag, detail: detail !== undefined ? redactSecrets(detail) : undefined });
     };
 
+    // Re-resolve CA on each doctor run (profile switches / mkcert install mid-session).
+    installTlsDispatcher(ctx.cfg);
+    const tls = getTlsResolveInfo();
+
     add("profile", true, {
       profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
       oidc_authority: ctx.cfg.oidcAuthority,
       api_base: ctx.cfg.apiBaseUrl,
       extra_ca_file: ctx.cfg.extraCaFile || null,
+      ca_file_resolved: tls.ca_file,
+      ca_source: tls.ca_source,
+      local_dev_hosts: tls.local_dev_hosts,
       client_cert_file: ctx.cfg.clientCertFile || null,
     });
+
+    if (tls.local_dev_hosts && tls.ca_source === "none") {
+      add("tls_ca", false, {
+        hint: "No mkcert/extra CA for *.yaaif.local. Run mkcert -install or set YAAIF_EXTRA_CA_FILE to rootCA.pem.",
+        mkcert_candidates: tls.mkcert_candidates,
+      });
+    } else {
+      add("tls_ca", true, {
+        ca_source: tls.ca_source,
+        ca_file: tls.ca_file,
+        mkcert_candidates: tls.mkcert_candidates,
+      });
+    }
 
     try {
       const url = `${ctx.cfg.oidcAuthority}/.well-known/openid-configuration`;
@@ -37,7 +71,7 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
         device_authorization_endpoint: doc?.device_authorization_endpoint ?? null,
       });
     } catch (e) {
-      add("oidc_discovery", false, String(e));
+      add("oidc_discovery", false, { error: String(e), hint: tlsHint(e, tls) });
     }
 
     for (const [name, base] of [
@@ -50,7 +84,7 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
         const status = (await yaaifFetch(`${base}/health`)).status;
         add(name, status >= 200 && status < 500, { status, base });
       } catch (e) {
-        add(name, false, { base, error: String(e) });
+        add(name, false, { base, error: String(e), hint: tlsHint(e, tls) });
       }
     }
 

@@ -17,11 +17,12 @@ async function main(): Promise<void> {
   await store.ensureHome(cfg.cursorHome);
   const profiles = new ProfileStore(cfg.cursorHome);
   await profiles.ensureHome();
-  if (cfg.activeProfileId) {
+  // Prefer ~/.yaaif/cursor/active-profile.json (yaaif_platform_use) over Cursor
+  // plugin vars — those default to "hosted" and would otherwise ignore local-hybrid.
+  const fromFile = await applyActiveProfile(cfg, profiles);
+  if (!fromFile && cfg.activeProfileId) {
     const p = await profiles.get(cfg.activeProfileId);
     if (p) applyProfileToConfig(cfg, p);
-  } else {
-    await applyActiveProfile(cfg, profiles);
   }
   installTlsDispatcher(cfg);
 
@@ -32,7 +33,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "yaaif-cursor",
-    version: "0.9.0",
+    version: "0.12.2",
   });
   registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
 

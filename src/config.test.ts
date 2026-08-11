@@ -9,6 +9,9 @@ test("loadConfig reads env defaults", () => {
   process.env.YAAIF_CONTROL_PLANE_BASE_URL = "https://example.com/cp/";
   process.env.YAAIF_APPROVAL_BASE_URL = "https://example.com/appr/";
   process.env.YAAIF_OIDC_CLIENT_ID = "yaaif-cursor";
+  delete process.env.YAAIF_PLATFORM_PROFILE;
+  delete process.env.YAAIF_EXTRA_CA_FILE;
+  delete process.env.NODE_EXTRA_CA_CERTS;
   const cfg = loadConfig();
   assert.equal(cfg.oidcAuthority, "https://example.com/auth/realms/yaaif");
   assert.equal(cfg.apiBaseUrl, "https://example.com/api-host");
