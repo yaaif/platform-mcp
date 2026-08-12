@@ -8,6 +8,7 @@ import { registerPlanTools } from "./registerPlan.js";
 import { registerOpsTools } from "./registerOps.js";
 import { registerDoctorTools } from "./registerDoctor.js";
 import { registerLocalTools } from "./registerLocalTools.js";
+import { registerFileTools } from "./registerFiles.js";
 import { registerOpsSupportTools } from "./registerOpsSupport.js";
 import { registerApiKeyTools } from "./registerApiKeys.js";
 import { registerMcpDeploymentTools } from "./registerMcpDeployments.js";
@@ -28,6 +29,7 @@ export function registerAllTools(server, ctx) {
     registerOpsTools(server, ctx);
     registerOpsSupportTools(server, ctx);
     registerLocalTools(server, ctx);
+    registerFileTools(server, ctx);
     registerDoctorTools(server, ctx);
 }
 function registerSkills(server, ctx) {
@@ -777,7 +779,7 @@ function registerMcp(server, ctx) {
         }
     });
     server.registerTool("yaaif_catalog_overview", {
-        description: "Read-only snapshot of the current tenant: agents, skills, MCP tools/servers/deployments, API keys, deployment settings status, ambient agents/workflows (paginated summaries).",
+        description: "Read-only snapshot of the current tenant: agents, skills, MCP tools/servers/deployments, API keys, deployment settings status, ambient agents/workflows, local tools, file registry lifecycle (paginated summaries).",
         inputSchema: {
             q: z.string().optional(),
             limit: z.number().optional(),
@@ -809,6 +811,7 @@ function registerMcp(server, ctx) {
             load("ambient_agents", () => ctx.api.agentJSON("GET", `/api/ambient/agents${qs}`)),
             load("ambient_workflows", () => ctx.api.agentJSON("GET", `/api/ambient/workflows${qs}`)),
             load("local_tools", () => ctx.api.agentJSON("GET", "/api/local-tools")),
+            load("file_registry_lifecycle", () => ctx.api.agentJSON("GET", "/api/file-attachments/registry-lifecycle")),
         ]);
         if (Object.keys(errors).length)
             out.errors = errors;

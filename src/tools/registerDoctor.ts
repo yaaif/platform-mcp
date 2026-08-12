@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
+import { ensureDevSession } from "../lib/devSession.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
 
@@ -141,6 +142,33 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
         void ctx.telemetry.increment("doctor_local_tools_fail");
       }
       try {
+        const filesTools = await ctx.api.agentJSON<{
+          count?: number;
+          names?: string[];
+          items?: Array<{ name?: string }>;
+        }>("GET", "/api/local-tools?family=files&names_only=true");
+        const names = Array.isArray(filesTools.names)
+          ? filesTools.names.map((n) => String(n).trim().toLowerCase()).filter(Boolean)
+          : (filesTools.items ?? [])
+            .map((i) => String(i.name ?? "").trim().toLowerCase())
+            .filter(Boolean);
+        const required = ["files_list", "file_load_context", "load_artifacts"];
+        const missing = required.filter((n) => !names.includes(n));
+        const okFiles = missing.length === 0;
+        add("local_tools_files", okFiles, {
+          count: filesTools.count ?? names.length,
+          names,
+          missing,
+          hint: okFiles
+            ? undefined
+            : "Upgrade agent-service so files family includes load_artifacts (ADK artifact helper).",
+        });
+        void ctx.telemetry.increment(okFiles ? "doctor_local_tools_files_ok" : "doctor_local_tools_files_fail");
+      } catch (e) {
+        add("local_tools_files", false, String(e));
+        void ctx.telemetry.increment("doctor_local_tools_files_fail");
+      }
+      try {
         const smoke = await ctx.api.agentJSON<{ is_error?: boolean; name?: string }>(
           "POST",
           "/api/local-tools/list_ambient_workflows/call",
@@ -152,6 +180,40 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
       } catch (e) {
         add("local_tools_smoke", false, String(e));
         void ctx.telemetry.increment("doctor_local_tools_smoke_fail");
+      }
+      try {
+        const ensured = await ensureDevSession(ctx);
+        const [listRes, artifactsRes] = await Promise.all([
+          ctx.api.agentJSON<{ is_error?: boolean }>("POST", "/api/local-tools/files_list/call", {
+            arguments: { scope: "session", limit: 5 },
+            session_id: ensured.session_id,
+            agent_id: ensured.agent_id || undefined,
+            resolve_workspace: false,
+          }),
+          ctx.api.agentJSON<{ is_error?: boolean }>("POST", "/api/local-tools/load_artifacts/call", {
+            arguments: {},
+            session_id: ensured.session_id,
+            agent_id: ensured.agent_id || undefined,
+            resolve_workspace: false,
+          }),
+        ]);
+        const okFilesSmoke =
+          listRes?.is_error !== true && artifactsRes?.is_error !== true;
+        add("local_tools_files_smoke", okFilesSmoke, {
+          session_id: ensured.session_id,
+          reused: ensured.reused,
+          files_list: listRes,
+          load_artifacts: artifactsRes,
+        });
+        void ctx.telemetry.increment(
+          okFilesSmoke ? "doctor_local_tools_files_smoke_ok" : "doctor_local_tools_files_smoke_fail",
+        );
+      } catch (e) {
+        add("local_tools_files_smoke", false, {
+          error: String(e).slice(0, 240),
+          hint: "Ensure agent-service local-tools files family + /api/local-tools/dev-session work for this user",
+        });
+        void ctx.telemetry.increment("doctor_local_tools_files_smoke_fail");
       }
       try {
         const lifecycle = await ctx.api.agentJSON<{
@@ -213,6 +275,27 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
         void ctx.telemetry.increment(
           authDenied ? "doctor_file_registry_storage_ok" : "doctor_file_registry_storage_fail",
         );
+      }
+      try {
+        // Missing artifact_name → 400 means the ADK artifact versions route is mounted.
+        await ctx.api.agentJSON("GET", "/api/files/artifacts/versions");
+        add("file_artifacts_api", true, { note: "unexpected 200 without artifact_name" });
+        void ctx.telemetry.increment("doctor_file_artifacts_api_ok");
+      } catch (e) {
+        const msg = String(e);
+        const routeOk =
+          /\b400\b/.test(msg) ||
+          /artifact_name is required/i.test(msg) ||
+          /\b403\b/.test(msg);
+        add("file_artifacts_api", routeOk, {
+          error: msg.slice(0, 240),
+          hint: routeOk && /\b403\b/.test(msg)
+            ? "Route exists; grant chat/files read permission"
+            : routeOk
+              ? undefined
+              : "Ensure agent-service exposes GET /api/files/artifacts/versions",
+        });
+        void ctx.telemetry.increment(routeOk ? "doctor_file_artifacts_api_ok" : "doctor_file_artifacts_api_fail");
       }
       try {
         // Missing seed → 400 means the RO ops route is mounted.

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
 import { extractSkillToolsFromMarkdown, verifyToolsAgainstCatalogs, } from "../lib/skillFrontmatter.js";
+import { ensureDevSession, resolveDevAgentId, resolveDevSessionId, } from "../lib/devSession.js";
 const MUTATING_ACK_TOOLS = new Set([
     "skill_archive_or_delete",
     "skill_repo_ops",
@@ -8,24 +9,6 @@ const MUTATING_ACK_TOOLS = new Set([
     "ambient_approval_delete",
     "session_state_delete",
 ]);
-async function persistDevSession(ctx, result) {
-    await ctx.auth.patchSession({
-        dev_session_id: result.session_id,
-        dev_agent_id: result.agent_id,
-    });
-}
-async function resolveDevSessionId(ctx, explicit) {
-    if (explicit?.trim())
-        return explicit.trim();
-    const sess = await ctx.auth.session();
-    return sess?.dev_session_id?.trim() || undefined;
-}
-async function resolveDevAgentId(ctx, explicit) {
-    if (explicit?.trim())
-        return explicit.trim();
-    const sess = await ctx.auth.session();
-    return sess?.dev_agent_id?.trim() || undefined;
-}
 async function callLocal(ctx, localName, args, opts = {}) {
     const sessionId = await resolveDevSessionId(ctx, opts.session_id);
     const agentId = await resolveDevAgentId(ctx, opts.agent_id);
@@ -145,23 +128,8 @@ export function registerLocalTools(server, ctx) {
         },
     }, async ({ session_id, agent_id, force_new }) => {
         try {
-            if (!force_new) {
-                const existing = await resolveDevSessionId(ctx, session_id);
-                if (existing) {
-                    const sess = await ctx.auth.session();
-                    return ok("Reusing Cursor dev session.", {
-                        session_id: existing,
-                        agent_id: agent_id || sess?.dev_agent_id || "",
-                        reused: true,
-                    });
-                }
-            }
-            const result = await ctx.api.agentJSON("POST", "/api/local-tools/dev-session", {
-                session_id: session_id || undefined,
-                agent_id: agent_id || undefined,
-            });
-            await persistDevSession(ctx, result);
-            return ok("Created Cursor dev session.", { ...result, reused: false });
+            const result = await ensureDevSession(ctx, { session_id, agent_id, force_new });
+            return ok(result.reused ? "Reusing Cursor dev session." : "Created Cursor dev session.", result);
         }
         catch (e) {
             return fail(String(e));
@@ -234,6 +202,10 @@ export function registerLocalTools(server, ctx) {
     alias("yaaif_skill_edit_section", "skill_edit_section", "Edit a SKILL.md section via skill_edit_section.");
     alias("yaaif_list_ambient_workflows", "list_ambient_workflows", "List ambient workflows via platform local tool.");
     alias("yaaif_trigger_ambient_workflow", "trigger_ambient_workflow", "Trigger an ambient workflow via platform local tool.");
-    alias("yaaif_files_list", "files_list", "List ingested files for the Cursor/dev session. Call yaaif_dev_session_ensure first.");
-    alias("yaaif_file_load_context", "file_load_context", "Load extracted file text via file_load_context.");
+    alias("yaaif_files_list", "files_list", "List ingested files for the Cursor/dev session (includes artifact_name/version when present). Call yaaif_dev_session_ensure first.");
+    alias("yaaif_files_search", "files_search", "Search uploaded files by name/preview via files_search. Call yaaif_dev_session_ensure first.");
+    alias("yaaif_file_load_context", "file_load_context", "Load extracted text via file_load_context. file_id may be a durable UUID or ADK artifact filename; pass version for a historical revision.");
+    alias("yaaif_load_artifacts", "load_artifacts", "ADK-aligned artifact helper: list session/user: artifacts or load by filename/file_id (optional version). Prefer for human-readable names.");
+    alias("yaaif_file_share_link", "file_share_link", "Mint a short-lived signed URL via file_share_link (when share links are enabled on the platform).");
+    alias("yaaif_generate_file", "generate_file", "Create a downloadable file in the session via generate_file (returns file_id / artifact_name).");
 }

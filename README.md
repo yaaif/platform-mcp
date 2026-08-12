@@ -11,5 +11,5 @@ node dist/cli.js
 Or via npx after publish:
 
 ```bash
-npx -y @yaaif/cursor-mcp@0.2.0
+npx -y @yaaif/cursor-mcp@1.1.0
 ```
