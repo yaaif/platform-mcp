@@ -163,6 +163,13 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
             share_links_enabled?: boolean;
             warnings?: string[];
           };
+          storage?: {
+            plugin_ok?: boolean;
+            remote?: boolean;
+            ping_ok?: boolean;
+            ping_error?: string;
+            backend?: string;
+          };
         }>("GET", "/api/file-attachments/registry-lifecycle");
         const ready = Boolean(lifecycle?.readiness?.ready ?? lifecycle?.readiness?.record_sink_wired);
         add("file_registry", ready, {
@@ -170,6 +177,23 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
           readiness: lifecycle?.readiness,
         });
         void ctx.telemetry.increment(ready ? "doctor_file_registry_ok" : "doctor_file_registry_fail");
+
+        const storage = lifecycle?.storage;
+        const pluginOk = Boolean(storage?.plugin_ok);
+        const remote = Boolean(storage?.remote);
+        const pingOk = Boolean(storage?.ping_ok);
+        const storageOk = !remote || (pluginOk && pingOk);
+        add("file_registry_storage", storageOk, {
+          storage: storage ?? null,
+          plugin_ok: pluginOk,
+          remote,
+          ping_ok: pingOk,
+          ping_error: storage?.ping_error,
+          backend: storage?.backend,
+        });
+        void ctx.telemetry.increment(
+          storageOk ? "doctor_file_registry_storage_ok" : "doctor_file_registry_storage_fail",
+        );
       } catch (e) {
         const msg = String(e);
         const authDenied = /\b403\b/.test(msg);
@@ -180,6 +204,15 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
             : "Ensure agent-service exposes GET /api/file-attachments/registry-lifecycle",
         });
         void ctx.telemetry.increment(authDenied ? "doctor_file_registry_ok" : "doctor_file_registry_fail");
+        add("file_registry_storage", authDenied, {
+          error: msg.slice(0, 240),
+          hint: authDenied
+            ? "Route exists; grant agent LLM models read for registry lifecycle storage"
+            : "Ensure agent-service exposes GET /api/file-attachments/registry-lifecycle with storage",
+        });
+        void ctx.telemetry.increment(
+          authDenied ? "doctor_file_registry_storage_ok" : "doctor_file_registry_storage_fail",
+        );
       }
       try {
         // Missing seed → 400 means the RO ops route is mounted.
