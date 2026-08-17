@@ -457,9 +457,10 @@ function registerAmbient(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_ambient_workflow_update", {
-    description: "Update an ambient workflow graph / metadata.",
+    description: "Update an ambient workflow graph / metadata, including ambient agent assignment.",
     inputSchema: {
       workflow_id: z.string(),
+      ambient_agent_id: z.string().optional(),
       name: z.string().optional(),
       description: z.string().optional(),
       enabled: z.boolean().optional(),
