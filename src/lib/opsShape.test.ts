@@ -10,12 +10,14 @@ test("summary_only keeps failures and drops ambient raw", () => {
       next_steps: ["a"],
       ambient: { huge: true },
       session: { huge: true },
+      run_path: { coverage: { label: "2/4 reached" } },
     },
     { summary_only: true },
   ) as Record<string, unknown>;
   assert.equal(shaped.diagnostics_version, "ops-diagnostics/1");
   assert.ok(Array.isArray(shaped.failures));
   assert.equal(shaped.ambient, undefined);
+  assert.deepEqual(shaped.run_path, { coverage: { label: "2/4 reached" } });
 });
 
 test("max_items truncates items array", () => {

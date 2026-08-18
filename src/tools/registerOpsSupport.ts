@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { shapeOpsPayload } from "../lib/opsShape.js";
+import { extractAmbientRunId, shapeRunPath } from "../lib/runPath.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
 
@@ -27,6 +28,35 @@ type ShapeOpts = {
   max_chars?: number;
   max_items?: number;
 };
+
+async function fetchAmbientRunDetail(ctx: Ctx, runId: string): Promise<unknown | undefined> {
+  const id = runId.trim();
+  if (!id) {
+    return undefined;
+  }
+  try {
+    return await ctx.api.agentJSON("GET", `/api/ambient/runs/${encodeURIComponent(id)}`);
+  } catch {
+    return undefined;
+  }
+}
+
+async function attachRunPath(ctx: Ctx, result: unknown, fallbackRunId?: string): Promise<unknown> {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return result;
+  }
+  const runId = extractAmbientRunId(result, fallbackRunId);
+  const detail = await fetchAmbientRunDetail(ctx, runId);
+  const path = shapeRunPath({
+    run: detail ?? result,
+    apiBaseUrl: ctx.cfg.apiBaseUrl,
+    runId,
+  });
+  if (!path) {
+    return result;
+  }
+  return { ...(result as Record<string, unknown>), run_path: path };
+}
 
 function shapedOk(summary: string, result: unknown, opts: ShapeOpts, defaults?: ShapeOpts) {
   const merged = {
@@ -149,7 +179,7 @@ export function registerOpsSupportTools(server: McpServer, ctx: Ctx): void {
 
   server.registerTool("yaaif_ops_analyze", {
     description:
-      "READ-ONLY: one-shot incident analysis — correlate IDs, rank failures, and return next_steps. Prefer this first; then yaaif_ops_telemetry for drill-down.",
+      "READ-ONLY: one-shot incident analysis — correlate IDs, rank failures, and return next_steps. When an ambient run is linked, also includes run_path (coverage/path/current step/canvas URL). Prefer this first; then yaaif_ops_telemetry for drill-down.",
     inputSchema: {
       session_id: z.string().optional(),
       ambient_run_id: z.string().optional(),
@@ -173,7 +203,8 @@ export function registerOpsSupportTools(server: McpServer, ctx: Ctx): void {
       })}`;
       const result = await ctx.api.agentJSON("GET", path);
       void ctx.telemetry.increment("ops_analyze_ok");
-      return shapedOk("Analyzed ops incident.", result, args, { summary_only: true });
+      const withPath = await attachRunPath(ctx, result, args.ambient_run_id);
+      return shapedOk("Analyzed ops incident.", withPath, args, { summary_only: true });
     } catch (e) {
       void ctx.telemetry.increment("ops_analyze_fail");
       return fail(String(e));
@@ -196,7 +227,8 @@ export function registerOpsSupportTools(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_ops_ambient_run_get", {
-    description: "READ-ONLY: ambient workflow run detail + diagnostic failures for a run_id.",
+    description:
+      "READ-ONLY: ambient workflow run detail + diagnostic failures for a run_id, plus run_path (coverage/path/current step/canvas URL).",
     inputSchema: { run_id: z.string(), ...shapeOptsSchema },
   }, async (args) => {
     try {
@@ -204,7 +236,8 @@ export function registerOpsSupportTools(server: McpServer, ctx: Ctx): void {
         "GET",
         `/api/ops/ambient-runs/${encodeURIComponent(args.run_id)}`,
       );
-      return shapedOk("Fetched ops ambient run analysis.", result, args, { summary_only: true });
+      const withPath = await attachRunPath(ctx, result, args.run_id);
+      return shapedOk("Fetched ops ambient run analysis.", withPath, args, { summary_only: true });
     } catch (e) {
       return fail(String(e));
     }
