@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
 import { mergeSkillIds } from "../lib/mergeSkillIds.js";
+import { ENGINE_SPINE_ONLY_WARNING, isEngineSpineOnlyGraph } from "../lib/workflowGraph.js";
 import { registerAuthTools } from "./registerAuth.js";
 import { registerDesktopTools } from "./registerDesktop.js";
 import { registerApprovalTools } from "./registerApproval.js";
@@ -463,9 +464,14 @@ function registerAmbient(server, ctx) {
             body.trigger_rules = args.trigger_rules;
         try {
             const path = `/api/ambient/agents/${encodeURIComponent(args.ambient_agent_id)}/workflows`;
-            return ok(`Created ambient workflow ${args.name}.`, {
-                workflow: await ctx.api.agentJSON("POST", path, body),
-            });
+            const workflow = await ctx.api.agentJSON("POST", path, body);
+            const warnings = isEngineSpineOnlyGraph(args.workflow_graph)
+                ? [ENGINE_SPINE_ONLY_WARNING]
+                : undefined;
+            const summary = warnings
+                ? `Created ambient workflow ${args.name}. Warning: ${ENGINE_SPINE_ONLY_WARNING}`
+                : `Created ambient workflow ${args.name}.`;
+            return ok(summary, { workflow, ...(warnings ? { warnings } : {}) });
         }
         catch (e) {
             return fail(String(e));
@@ -502,9 +508,10 @@ function registerAmbient(server, ctx) {
         }
     });
     server.registerTool("yaaif_ambient_workflow_update", {
-        description: "Update an ambient workflow graph / metadata.",
+        description: "Update an ambient workflow graph / metadata, including ambient agent assignment.",
         inputSchema: {
             workflow_id: z.string(),
+            ambient_agent_id: z.string().optional(),
             name: z.string().optional(),
             description: z.string().optional(),
             enabled: z.boolean().optional(),
@@ -523,9 +530,14 @@ function registerAmbient(server, ctx) {
                 body[k] = v;
         }
         try {
-            return ok("Updated ambient workflow.", {
-                workflow: await ctx.api.agentJSON("PUT", `/api/ambient/workflows/${encodeURIComponent(workflow_id)}`, body),
-            });
+            const workflow = await ctx.api.agentJSON("PUT", `/api/ambient/workflows/${encodeURIComponent(workflow_id)}`, body);
+            const warnings = args.workflow_graph !== undefined && isEngineSpineOnlyGraph(args.workflow_graph)
+                ? [ENGINE_SPINE_ONLY_WARNING]
+                : undefined;
+            const summary = warnings
+                ? `Updated ambient workflow. Warning: ${ENGINE_SPINE_ONLY_WARNING}`
+                : "Updated ambient workflow.";
+            return ok(summary, { workflow, ...(warnings ? { warnings } : {}) });
         }
         catch (e) {
             return fail(String(e));

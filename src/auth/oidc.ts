@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import open from "open";
 import { yaaifFetch } from "../client/tls.js";
 import type { Config } from "../config.js";
+import { renderLoginCallbackPage } from "./callbackPage.js";
 import type { Session, SessionStore, TokenSet } from "./store.js";
 
 export class ReauthRequiredError extends Error {
@@ -117,32 +118,64 @@ export class AuthClient {
           res.writeHead(404).end();
           return;
         }
+        const sendPage = (status: number, html: string) => {
+          res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(html);
+        };
         if (url.searchParams.get("state") !== state) {
-          res.writeHead(400).end("invalid state");
+          sendPage(
+            400,
+            renderLoginCallbackPage({
+              ok: false,
+              heading: "Sign-in could not be verified",
+              message: "The sign-in response did not match this login attempt. Start login again from Cursor.",
+              returnTo: "Cursor",
+            }),
+          );
           clearTimeout(timer);
           reject(new Error("invalid oauth state"));
           return;
         }
         const err = url.searchParams.get("error");
         if (err) {
-          res.writeHead(400).end(err);
+          sendPage(
+            400,
+            renderLoginCallbackPage({
+              ok: false,
+              heading: "Sign-in was not completed",
+              message: `The identity provider returned ${err}.`,
+              returnTo: "Cursor",
+            }),
+          );
           clearTimeout(timer);
           reject(new Error(`oauth error: ${err}`));
           return;
         }
         const authCode = url.searchParams.get("code");
         if (!authCode) {
-          res.writeHead(400).end("missing code");
+          sendPage(
+            400,
+            renderLoginCallbackPage({
+              ok: false,
+              heading: "Sign-in was not completed",
+              message: "The authorization code was missing from the sign-in response.",
+              returnTo: "Cursor",
+            }),
+          );
           clearTimeout(timer);
           reject(new Error("missing authorization code"));
           return;
         }
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(`<!doctype html><html><body style="font-family:system-ui;padding:2rem">
-<h2>YAA\\F login complete</h2>
-<p>Signed in to <code>${this.cfg.oidcAuthority}</code>.</p>
-<p>You can close this window and return to Cursor.</p>
-</body></html>`);
+        sendPage(
+          200,
+          renderLoginCallbackPage({
+            ok: true,
+            heading: "You're signed in",
+            message: "Authentication finished successfully.",
+            detail: this.cfg.oidcAuthority,
+            returnTo: "Cursor",
+          }),
+        );
         clearTimeout(timer);
         resolve(authCode);
         server.close();

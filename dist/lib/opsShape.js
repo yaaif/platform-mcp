@@ -38,6 +38,7 @@ function summarizeOpsRecord(result) {
         request_id: result.request_id,
         desktop_run_id: result.desktop_run_id,
         ambient_run_id: result.ambient_run_id,
+        run_path: result.run_path,
     };
     // Keep bounded item lists when present (already summaries from server).
     for (const key of ["items", "messages", "events", "logs", "timeline"]) {

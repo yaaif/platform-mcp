@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { shapeOpsPayload } from "../lib/opsShape.js";
+import { extractAmbientRunId, shapeRunPath } from "../lib/runPath.js";
 import { fail, ok } from "./helpers.js";
 function opsQuery(params) {
     const qs = new URLSearchParams();
@@ -18,6 +19,34 @@ const shapeOptsSchema = {
     max_chars: z.number().int().positive().optional().describe("Soft JSON size cap for the tool result"),
     max_items: z.number().int().positive().optional().describe("Cap items/events/logs arrays (default 40)"),
 };
+async function fetchAmbientRunDetail(ctx, runId) {
+    const id = runId.trim();
+    if (!id) {
+        return undefined;
+    }
+    try {
+        return await ctx.api.agentJSON("GET", `/api/ambient/runs/${encodeURIComponent(id)}`);
+    }
+    catch {
+        return undefined;
+    }
+}
+async function attachRunPath(ctx, result, fallbackRunId) {
+    if (!result || typeof result !== "object" || Array.isArray(result)) {
+        return result;
+    }
+    const runId = extractAmbientRunId(result, fallbackRunId);
+    const detail = await fetchAmbientRunDetail(ctx, runId);
+    const path = shapeRunPath({
+        run: detail ?? result,
+        apiBaseUrl: ctx.cfg.apiBaseUrl,
+        runId,
+    });
+    if (!path) {
+        return result;
+    }
+    return { ...result, run_path: path };
+}
 function shapedOk(summary, result, opts, defaults) {
     const merged = {
         summary_only: opts.summary_only ?? defaults?.summary_only,
@@ -115,7 +144,7 @@ export function registerOpsSupportTools(server, ctx) {
         }
     });
     server.registerTool("yaaif_ops_analyze", {
-        description: "READ-ONLY: one-shot incident analysis — correlate IDs, rank failures, and return next_steps. Prefer this first; then yaaif_ops_telemetry for drill-down.",
+        description: "READ-ONLY: one-shot incident analysis — correlate IDs, rank failures, and return next_steps. When an ambient run is linked, also includes run_path (coverage/path/current step/canvas URL). Prefer this first; then yaaif_ops_telemetry for drill-down.",
         inputSchema: {
             session_id: z.string().optional(),
             ambient_run_id: z.string().optional(),
@@ -139,7 +168,8 @@ export function registerOpsSupportTools(server, ctx) {
             })}`;
             const result = await ctx.api.agentJSON("GET", path);
             void ctx.telemetry.increment("ops_analyze_ok");
-            return shapedOk("Analyzed ops incident.", result, args, { summary_only: true });
+            const withPath = await attachRunPath(ctx, result, args.ambient_run_id);
+            return shapedOk("Analyzed ops incident.", withPath, args, { summary_only: true });
         }
         catch (e) {
             void ctx.telemetry.increment("ops_analyze_fail");
@@ -159,12 +189,13 @@ export function registerOpsSupportTools(server, ctx) {
         }
     });
     server.registerTool("yaaif_ops_ambient_run_get", {
-        description: "READ-ONLY: ambient workflow run detail + diagnostic failures for a run_id.",
+        description: "READ-ONLY: ambient workflow run detail + diagnostic failures for a run_id, plus run_path (coverage/path/current step/canvas URL).",
         inputSchema: { run_id: z.string(), ...shapeOptsSchema },
     }, async (args) => {
         try {
             const result = await ctx.api.agentJSON("GET", `/api/ops/ambient-runs/${encodeURIComponent(args.run_id)}`);
-            return shapedOk("Fetched ops ambient run analysis.", result, args, { summary_only: true });
+            const withPath = await attachRunPath(ctx, result, args.run_id);
+            return shapedOk("Fetched ops ambient run analysis.", withPath, args, { summary_only: true });
         }
         catch (e) {
             return fail(String(e));
