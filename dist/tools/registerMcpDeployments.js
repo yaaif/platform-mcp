@@ -80,6 +80,9 @@ export function registerMcpDeploymentTools(server, ctx) {
             auto_register: z.boolean().optional(),
             auto_import_tools: z.boolean().optional(),
             registry_credential_id: z.string().optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
+            spec_version: z.number().int().positive().optional(),
         },
     }, async (args) => {
         try {
@@ -103,8 +106,27 @@ export function registerMcpDeploymentTools(server, ctx) {
                 body.endpoint_host = args.endpoint_host;
             if (args.registry_credential_id)
                 body.registry_credential_id = args.registry_credential_id;
+            const deployment = await ctx.api.apiJSON("POST", "/api/mcp-deployments", body);
+            let scenario_binding;
+            if (args.spec_id && args.slot_key && args.spec_version && deployment.external_mcp_server_id) {
+                scenario_binding = await ctx.api.agentJSON("POST", `/api/agent-specs/${encodeURIComponent(args.spec_id)}/bindings`, {
+                    expected_version: args.spec_version,
+                    slot_key: args.slot_key,
+                    kind: "mcp_server",
+                    entity_id: deployment.external_mcp_server_id,
+                    entity_name: args.name,
+                    source: "cursor_plugin",
+                });
+            }
+            else if (args.spec_id && args.slot_key) {
+                scenario_binding = {
+                    pending: true, spec_id: args.spec_id, slot_key: args.slot_key, spec_version: args.spec_version,
+                    reason: "Pass this Scenario context to yaaif_mcp_deployment_register after the MCP server is registered.",
+                };
+            }
             return ok(`Created MCP deployment ${args.name} (${method}).`, {
-                deployment: await ctx.api.apiJSON("POST", "/api/mcp-deployments", body),
+                deployment,
+                ...(scenario_binding ? { scenario_binding } : {}),
                 deployment_method: method,
                 next_steps: method === "kubernetes_gitops"
                     ? [
@@ -253,11 +275,23 @@ export function registerMcpDeploymentTools(server, ctx) {
     });
     server.registerTool("yaaif_mcp_deployment_register", {
         description: "Register a deployed MCP server into the agent-service tool catalog.",
-        inputSchema: { deployment_id: z.string() },
-    }, async ({ deployment_id }) => {
+        inputSchema: { deployment_id: z.string(), spec_id: z.string().optional(), slot_key: z.string().optional(), spec_version: z.number().int().positive().optional() },
+    }, async ({ deployment_id, spec_id, slot_key, spec_version }) => {
         try {
+            const deployment = await ctx.api.apiJSON("POST", `/api/mcp-deployments/${encodeURIComponent(deployment_id)}/register`, {});
+            let scenario_binding;
+            if (spec_id && slot_key && spec_version) {
+                if (!deployment.external_mcp_server_id) {
+                    return fail("MCP deployment registered but did not return an external MCP server id; retry status/register before binding.", { deployment });
+                }
+                scenario_binding = await ctx.api.agentJSON("POST", `/api/agent-specs/${encodeURIComponent(spec_id)}/bindings`, {
+                    expected_version: spec_version, slot_key, kind: "mcp_server", entity_id: deployment.external_mcp_server_id,
+                    entity_name: deployment.name || deployment_id, source: "cursor_plugin",
+                });
+            }
             return ok("Registered MCP deployment into catalog.", {
-                deployment: await ctx.api.apiJSON("POST", `/api/mcp-deployments/${encodeURIComponent(deployment_id)}/register`, {}),
+                deployment,
+                ...(scenario_binding ? { scenario_binding } : {}),
             });
         }
         catch (e) {

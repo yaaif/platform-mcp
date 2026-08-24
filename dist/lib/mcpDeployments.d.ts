@@ -25,6 +25,7 @@ export type DeploymentRecord = {
     client_secret_headers?: ClientSecretHeaderMapping[];
     auto_register?: boolean;
     auto_import_tools?: boolean;
+    external_mcp_server_id?: string;
 };
 export type DeploymentSettings = {
     default_deployment_method?: string;

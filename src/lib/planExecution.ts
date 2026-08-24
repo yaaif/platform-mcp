@@ -17,6 +17,10 @@ export type PlanExecution = {
   plan_path?: string;
   tenant_id?: string;
   profile_id?: string;
+  spec_id?: string;
+  // Last Scenario draft version observed by the plan runner. A resumed plan
+  // must refresh readiness and reconcile this before issuing a mutation.
+  spec_version?: number;
   created_at: string;
   updated_at: string;
   steps: PlanExecStep[];

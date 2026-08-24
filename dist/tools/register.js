@@ -6,6 +6,7 @@ import { registerAuthTools } from "./registerAuth.js";
 import { registerDesktopTools } from "./registerDesktop.js";
 import { registerApprovalTools } from "./registerApproval.js";
 import { registerPlanTools } from "./registerPlan.js";
+import { registerSpecTools } from "./registerSpecs.js";
 import { registerOpsTools } from "./registerOps.js";
 import { registerDoctorTools } from "./registerDoctor.js";
 import { registerLocalTools } from "./registerLocalTools.js";
@@ -27,6 +28,7 @@ export function registerAllTools(server, ctx) {
     registerDesktopTools(server, ctx);
     registerApprovalTools(server, ctx);
     registerPlanTools(server, ctx);
+    registerSpecTools(server, ctx);
     registerOpsTools(server, ctx);
     registerOpsSupportTools(server, ctx);
     registerLocalTools(server, ctx);
@@ -124,6 +126,8 @@ function registerSkills(server, ctx) {
             assigned_user_emails: z.array(z.string()).optional(),
             include_references: z.boolean().optional(),
             include_examples: z.boolean().optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
         },
     }, async (args) => {
         const name = args.name || args.id.split("/").pop() || args.id;
@@ -143,6 +147,8 @@ function registerSkills(server, ctx) {
                 include_references: args.include_references ?? true,
                 include_examples: args.include_examples ?? true,
             },
+            spec_id: args.spec_id,
+            slot_key: args.slot_key,
         };
         try {
             return ok(`Created skill ${args.id}.`, { skill: await ctx.api.agentJSON("POST", "/api/skills", body) });
@@ -352,6 +358,8 @@ function registerAmbient(server, ctx) {
             agent_type: z.string().optional(),
             skill_ids: z.array(z.string()).optional(),
             enabled: z.boolean().optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
         },
     }, async (args) => {
         const body = {
@@ -361,6 +369,10 @@ function registerAmbient(server, ctx) {
             skill_ids: args.skill_ids ?? [],
             enabled: args.enabled ?? true,
         };
+        if (args.spec_id)
+            body.spec_id = args.spec_id;
+        if (args.slot_key)
+            body.slot_key = args.slot_key;
         if (args.agent_type)
             body.agent_type = args.agent_type;
         try {
@@ -414,6 +426,8 @@ function registerAmbient(server, ctx) {
             workflow_async_enabled: z.boolean().optional(),
             requires_approval: z.boolean().optional(),
             policy: z.record(z.unknown()).optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
         },
     }, async (args) => {
         const body = {
@@ -427,6 +441,10 @@ function registerAmbient(server, ctx) {
         };
         if (args.policy)
             body.policy = args.policy;
+        if (args.spec_id)
+            body.spec_id = args.spec_id;
+        if (args.slot_key)
+            body.slot_key = args.slot_key;
         try {
             return ok(`Created ambient agent ${args.name}.`, {
                 ambient_agent: await ctx.api.agentJSON("POST", "/api/ambient/agents", body),
@@ -437,17 +455,19 @@ function registerAmbient(server, ctx) {
         }
     });
     server.registerTool("yaaif_ambient_workflow_create", {
-        description: "Install an ambient workflow graph under an ambient agent.",
+        description: "Install an ambient workflow graph under an ambient agent. Omit workflow_graph to seed from the Agent Spec workflow_design segment when spec_id or a bound ambient agent is available.",
         inputSchema: {
             ambient_agent_id: z.string(),
             name: z.string(),
-            workflow_graph: z.record(z.unknown()),
+            workflow_graph: z.record(z.unknown()).optional(),
             description: z.string().optional(),
             enabled: z.boolean().optional(),
             workflow_async_enabled: z.boolean().optional(),
             requires_approval: z.boolean().optional(),
             policy: z.record(z.unknown()).optional(),
             trigger_rules: z.array(z.record(z.unknown())).optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
         },
     }, async (args) => {
         const body = {
@@ -456,12 +476,17 @@ function registerAmbient(server, ctx) {
             enabled: args.enabled ?? true,
             workflow_async_enabled: args.workflow_async_enabled ?? true,
             requires_approval: args.requires_approval ?? false,
-            workflow_graph: args.workflow_graph,
         };
+        if (args.workflow_graph)
+            body.workflow_graph = args.workflow_graph;
         if (args.policy)
             body.policy = args.policy;
         if (args.trigger_rules)
             body.trigger_rules = args.trigger_rules;
+        if (args.spec_id)
+            body.spec_id = args.spec_id;
+        if (args.slot_key)
+            body.slot_key = args.slot_key;
         try {
             const path = `/api/ambient/agents/${encodeURIComponent(args.ambient_agent_id)}/workflows`;
             const workflow = await ctx.api.agentJSON("POST", path, body);
@@ -691,6 +716,8 @@ function registerMcp(server, ctx) {
             timeout_seconds: z.number().optional(),
             headers: z.record(z.unknown()).optional(),
             env: z.record(z.unknown()).optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
         },
     }, async (args) => {
         const body = {
@@ -708,6 +735,10 @@ function registerMcp(server, ctx) {
         };
         if (args.server_id)
             body.server_id = args.server_id;
+        if (args.spec_id)
+            body.spec_id = args.spec_id;
+        if (args.slot_key)
+            body.slot_key = args.slot_key;
         try {
             return ok(`Linked/created MCP tool ${args.name}.`, {
                 result: await ctx.api.agentJSON("POST", "/api/mcp-tools/link-or-create", body),

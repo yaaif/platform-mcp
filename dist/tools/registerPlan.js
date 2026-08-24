@@ -39,6 +39,8 @@ export function registerPlanTools(server, ctx) {
             mcp_tool_names: z.array(z.string()).optional(),
             ambient_agent_names: z.array(z.string()).optional(),
             local_tool_names: z.array(z.string()).optional(),
+            spec_id: z.string().optional(),
+            spec_version: z.number().int().positive().optional(),
             q: z.string().optional(),
             limit: z.number().optional(),
         },
@@ -54,8 +56,17 @@ export function registerPlanTools(server, ctx) {
                 ambient_agent_names: args.ambient_agent_names,
                 local_tool_names: args.local_tool_names,
             }, buckets);
+            let coverage;
+            if (args.spec_id) {
+                try {
+                    coverage = await ctx.api.agentJSON("GET", `/api/agent-specs/${encodeURIComponent(args.spec_id)}/coverage`);
+                }
+                catch (e) {
+                    coverage = { error: String(e) };
+                }
+            }
             void ctx.telemetry.increment(result.ok ? "plan_verify_ok" : "plan_verify_fail");
-            return ok(result.ok ? "Plan verification passed." : "Plan verification found missing components.", { ...result, catalog_errors: raw.errors });
+            return ok(result.ok ? "Plan verification passed." : "Plan verification found missing components.", { ...result, catalog_errors: raw.errors, spec_coverage: coverage });
         }
         catch (e) {
             void ctx.telemetry.increment("plan_verify_fail");
@@ -116,6 +127,8 @@ export function registerPlanTools(server, ctx) {
         inputSchema: {
             slug: z.string(),
             plan_path: z.string().optional(),
+            spec_id: z.string().optional(),
+            spec_version: z.number().int().positive().optional(),
             steps: z.array(z.object({
                 id: z.string(),
                 tool: z.string(),
@@ -126,7 +139,7 @@ export function registerPlanTools(server, ctx) {
                 error: z.string().optional(),
             })),
         },
-    }, async ({ slug, plan_path, steps }) => {
+    }, async ({ slug, plan_path, spec_id, spec_version, steps }) => {
         const sess = await ctx.auth.session();
         const now = new Date().toISOString();
         const existing = await ctx.plans.get(slug);
@@ -145,6 +158,8 @@ export function registerPlanTools(server, ctx) {
             plan_path: plan_path || existing?.plan_path,
             tenant_id: sess?.tenant_id,
             profile_id: ctx.cfg.activeProfileId || sess?.profile_id,
+            spec_id: spec_id || existing?.spec_id,
+            spec_version: spec_version || existing?.spec_version,
             created_at: existing?.created_at || now,
             updated_at: now,
             steps: normalized,
@@ -191,15 +206,44 @@ export function registerPlanTools(server, ctx) {
         return ok(`Updated step ${step_id} → ${status}.`, { execution: saved, resume: ctx.plans.resumeHint(saved) });
     });
     server.registerTool("yaaif_plan_execution_resume", {
-        description: "Return the next pending/failed step and collected ids so the agent can continue without redoing completed work.",
+        description: "Refresh Scenario readiness/version before returning the next pending step. Halt for unresolved sync conflicts or failed verification evidence rather than repeating mutations.",
         inputSchema: { slug: z.string() },
     }, async ({ slug }) => {
         const exec = await ctx.plans.get(slug);
         if (!exec)
             return fail(`plan execution not found: ${slug}`);
         const resume = ctx.plans.resumeHint(exec);
+        let readiness;
+        let safety_halt;
+        if (exec.spec_id) {
+            try {
+                readiness = await ctx.api.agentJSON("GET", `/api/agent-specs/${encodeURIComponent(exec.spec_id)}/readiness`);
+                const blockerCodes = Array.isArray(readiness.blockers)
+                    ? readiness.blockers.map((b) => b.code)
+                    : [];
+                if (blockerCodes.includes("sync_conflicts")) {
+                    safety_halt = { code: "sync_conflicts", message: "Resolve Scenario sync conflicts via preview/apply before resuming." };
+                }
+                const evidence = await ctx.api.agentJSON("GET", `/api/agent-specs/${encodeURIComponent(exec.spec_id)}/evidence`);
+                const failed = evidence.items?.filter((item) => item.result === "failed") ?? [];
+                if (failed.length) {
+                    safety_halt = { code: "verification_failed", message: `Resolve failed evidence for ${failed.map((item) => item.requirement_key || "a requirement").join(", ")} before resuming.` };
+                }
+                const currentVersion = readiness.version;
+                if (currentVersion && currentVersion !== exec.spec_version) {
+                    exec.spec_version = currentVersion;
+                    await ctx.plans.save(exec);
+                }
+            }
+            catch (e) {
+                return fail(`Unable to refresh Scenario readiness before resume: ${String(e)}`);
+            }
+        }
+        if (safety_halt) {
+            return fail(safety_halt.message, { execution: exec, resume, readiness, safety_halt });
+        }
         return ok(resume.complete
             ? `Plan execution ${slug} is complete.`
-            : `Resume ${slug} at step ${resume.next_step?.id} (${resume.next_step?.tool}).`, { execution: exec, resume });
+            : `Resume ${slug} at step ${resume.next_step?.id} (${resume.next_step?.tool}).`, { execution: exec, resume, readiness });
     });
 }

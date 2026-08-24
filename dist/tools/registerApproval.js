@@ -72,6 +72,9 @@ export function registerApprovalTools(server, ctx) {
             approver_email: z.string().optional(),
             definition: z.record(z.unknown()).optional(),
             publish: z.boolean().optional(),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
+            spec_version: z.number().int().positive().optional(),
         },
     }, async (args) => {
         const objectType = (args.object_type || "WORKFLOW_PAUSE").toUpperCase();
@@ -100,10 +103,19 @@ export function registerApprovalTools(server, ctx) {
                     published = await ctx.api.approvalJSON("POST", `/api/approval/strategies/${encodeURIComponent(strategyId)}/versions/1/publish`, {});
                 }
             }
+            const strategyId = created.strategy?.id;
+            let scenario_binding;
+            if (args.spec_id && args.slot_key && args.spec_version && strategyId) {
+                scenario_binding = await ctx.api.agentJSON("POST", `/api/agent-specs/${encodeURIComponent(args.spec_id)}/bindings`, {
+                    expected_version: args.spec_version, slot_key: args.slot_key, kind: "approval_strategy",
+                    entity_id: strategyId, entity_name: args.name, source: "cursor_plugin",
+                });
+            }
             return ok(`Created approval strategy ${args.name}.`, {
                 created,
                 published,
-                approval_strategy_id: created.strategy?.id,
+                approval_strategy_id: strategyId,
+                ...(scenario_binding ? { scenario_binding } : {}),
             });
         }
         catch (e) {

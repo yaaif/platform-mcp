@@ -38,15 +38,25 @@ export function registerDesktopTools(server, ctx) {
         }
     });
     server.registerTool("yaaif_desktop_skill_mapping_set", {
-        description: "Replace worker ids mapped to a desktop skill (control-plane PUT).",
+        description: "Replace worker ids mapped to a desktop skill (control-plane PUT). Optionally trace this external dependency to a Scenario slot; attach evidence/attestation before activation.",
         inputSchema: {
             skill_id: z.string(),
             worker_ids: z.array(z.string()),
+            spec_id: z.string().optional(),
+            slot_key: z.string().optional(),
+            spec_version: z.number().int().positive().optional(),
         },
-    }, async ({ skill_id, worker_ids }) => {
+    }, async ({ skill_id, worker_ids, spec_id, slot_key, spec_version }) => {
         try {
             const mapping = await ctx.api.controlPlaneJSON("PUT", `/api/desktop/skill-mappings/${encodeURIComponent(skill_id)}`, { worker_ids });
-            return ok(`Mapped skill ${skill_id} to ${worker_ids.length} worker(s).`, { mapping });
+            let scenario_binding;
+            if (spec_id && slot_key && spec_version) {
+                scenario_binding = await ctx.api.agentJSON("POST", `/api/agent-specs/${encodeURIComponent(spec_id)}/bindings`, {
+                    expected_version: spec_version, slot_key, kind: "desktop_mapping", entity_id: skill_id,
+                    entity_name: skill_id, source: "cursor_plugin",
+                });
+            }
+            return ok(`Mapped skill ${skill_id} to ${worker_ids.length} worker(s).`, { mapping, ...(scenario_binding ? { scenario_binding } : {}) });
         }
         catch (e) {
             return fail(String(e));
