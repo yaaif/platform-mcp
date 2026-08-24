@@ -1,4 +1,14 @@
+export type BridgeClient = "cursor" | "codex" | "claude";
+export type ClientDescriptor = {
+    id: BridgeClient;
+    label: "Cursor" | "Codex" | "Claude Code";
+    oidcClientId: string;
+    stateHomeEnv: string;
+    stateHomeSuffix: string;
+    updatedBy: string;
+};
 export type Config = {
+    client: ClientDescriptor;
     oidcAuthority: string;
     oidcClientId: string;
     oidcScopes: string[];
@@ -7,7 +17,7 @@ export type Config = {
     controlPlaneBaseUrl: string;
     approvalBaseUrl: string;
     defaultTenantId: string;
-    cursorHome: string;
+    stateHome: string;
     /** Active named profile id (hosted | local-hybrid | local | custom). */
     activeProfileId: string;
     /** Extra CA PEM file for corporate / Traefik mTLS trust. */
@@ -17,4 +27,6 @@ export type Config = {
     /** Client private key PEM for mTLS (optional). */
     clientKeyFile: string;
 };
-export declare function loadConfig(): Config;
+export declare function clientDescriptor(client: BridgeClient): ClientDescriptor;
+export declare function parseBridgeClient(argv?: string[]): ClientDescriptor;
+export declare function loadConfig(client?: ClientDescriptor): Config;

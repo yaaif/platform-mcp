@@ -20,7 +20,14 @@ export function exportProfileEnv(cfg) {
         .filter(([, v]) => v)
         .map(([k, v]) => `export ${k}=${shellQuote(v)}`)
         .join("\n");
-    return { shell, cursor_plugin_variables: vars };
+    return {
+        shell,
+        client: cfg.client.id,
+        client_variables: vars,
+        ...(cfg.client.id === "cursor"
+            ? { cursor_plugin_variables: vars }
+            : { codex_plugin_variables: vars }),
+    };
 }
 function shellQuote(v) {
     if (/^[A-Za-z0-9_./:@%-]+$/.test(v))

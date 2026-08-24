@@ -21,12 +21,14 @@ export type ActiveProfileState = {
     profile_id: string;
     updated_at: string;
 };
+export declare function builtinProfiles(oidcClientId?: string): PlatformProfile[];
 export declare const BUILTIN_PROFILES: PlatformProfile[];
 export declare class ProfileStore {
-    private readonly cursorHome;
+    private readonly stateHome;
+    private readonly defaultOidcClientId;
     readonly customPath: string;
     readonly activePath: string;
-    constructor(cursorHome: string);
+    constructor(stateHome: string, defaultOidcClientId?: string);
     ensureHome(): Promise<void>;
     listCustom(): Promise<PlatformProfile[]>;
     saveCustom(profiles: PlatformProfile[]): Promise<void>;

@@ -5,19 +5,19 @@ import { AuthClient } from "./auth/oidc.js";
 import { SessionStore } from "./auth/store.js";
 import { ApiClient } from "./client/http.js";
 import { installTlsDispatcher } from "./client/tls.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, parseBridgeClient } from "./config.js";
 import { PlanExecutionStore } from "./lib/planExecution.js";
 import { TelemetryStore } from "./lib/telemetry.js";
 import { applyActiveProfile, applyProfileToConfig, ProfileStore } from "./platform/profiles.js";
 import { registerAllTools } from "./tools/register.js";
 async function main() {
-    const cfg = loadConfig();
-    const store = new SessionStore(cfg.cursorHome);
-    await store.ensureHome(cfg.cursorHome);
-    const profiles = new ProfileStore(cfg.cursorHome);
+    const cfg = loadConfig(parseBridgeClient());
+    const store = new SessionStore(cfg.stateHome);
+    await store.ensureHome(cfg.stateHome);
+    const profiles = new ProfileStore(cfg.stateHome, cfg.client.oidcClientId);
     await profiles.ensureHome();
-    // Prefer ~/.yaaif/cursor/active-profile.json (yaaif_platform_use) over Cursor
-    // plugin vars — those default to "hosted" and would otherwise ignore local-hybrid.
+    // Prefer the persisted client profile over environment defaults, so a selected
+    // local-hybrid profile is not overwritten by the hosted default on restart.
     const fromFile = await applyActiveProfile(cfg, profiles);
     if (!fromFile && cfg.activeProfileId) {
         const p = await profiles.get(cfg.activeProfileId);
@@ -27,11 +27,11 @@ async function main() {
     installTlsDispatcher(cfg);
     const auth = new AuthClient(cfg, store);
     const api = new ApiClient(cfg, auth);
-    const plans = new PlanExecutionStore(cfg.cursorHome);
-    const telemetry = new TelemetryStore(cfg.cursorHome);
+    const plans = new PlanExecutionStore(cfg.stateHome);
+    const telemetry = new TelemetryStore(cfg.stateHome);
     const server = new McpServer({
-        name: "yaaif-cursor",
-        version: "0.12.2",
+        name: `yaaif-${cfg.client.id}`,
+        version: "1.2.0",
     });
     registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
     const transport = new StdioServerTransport();

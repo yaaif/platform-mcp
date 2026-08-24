@@ -4,9 +4,9 @@ export type TelemetryState = {
     updated_at?: string;
 };
 export declare class TelemetryStore {
-    private readonly cursorHome;
+    private readonly stateHome;
     readonly path: string;
-    constructor(cursorHome: string);
+    constructor(stateHome: string);
     load(): Promise<TelemetryState>;
     save(state: TelemetryState): Promise<void>;
     setEnabled(enabled: boolean): Promise<TelemetryState>;

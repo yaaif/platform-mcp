@@ -1,7 +1,7 @@
 {
   "name": "@yaaif/platform-mcp",
-  "version": "1.2.0",
-  "description": "YAA\\F platform MCP bridge for Cursor and Codex — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
+  "version": "1.3.0",
+  "description": "YAA\\F platform MCP bridge for Cursor, Codex, and Claude Code — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
   "author": "YAA\\F / BeezLabs",
@@ -25,6 +25,7 @@
     "generate:local-tools-ref": "node ./scripts/generate-local-tools-ref.mjs",
     "start": "node dist/cli.js --client cursor",
     "start:codex": "node dist/cli.js --client codex",
+    "start:claude": "node dist/cli.js --client claude",
     "prepublishOnly": "npm test && npm run build"
   },
   "engines": {

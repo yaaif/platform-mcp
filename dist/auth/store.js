@@ -2,11 +2,11 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 export class SessionStore {
     path;
-    constructor(cursorHome) {
-        this.path = join(cursorHome, "session.json");
+    constructor(stateHome) {
+        this.path = join(stateHome, "session.json");
     }
-    async ensureHome(cursorHome) {
-        await mkdir(cursorHome, { recursive: true, mode: 0o700 });
+    async ensureHome(stateHome) {
+        await mkdir(stateHome, { recursive: true, mode: 0o700 });
     }
     async load() {
         try {

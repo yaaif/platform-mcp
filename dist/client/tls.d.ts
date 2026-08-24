@@ -14,7 +14,7 @@ export type TlsResolveInfo = {
     /** Candidate mkcert paths that exist on disk (for doctor hints). */
     mkcert_candidates: string[];
 };
-/** Ignore empty values and unexpanded Cursor plugin placeholders like `${YAAIF_EXTRA_CA_FILE}`. */
+/** Ignore empty values and unexpanded plugin placeholders like `${YAAIF_EXTRA_CA_FILE}`. */
 export declare function resolvedPath(raw: string | undefined | null): string;
 /** Local Traefik / mkcert hosts used by builtin `local` and `local-hybrid` profiles. */
 export declare function configUsesLocalDevHosts(cfg: Config): boolean;
@@ -30,7 +30,7 @@ export declare function resolveCaFile(cfg: Config, env?: NodeJS.ProcessEnv): Tls
  *
  * For `*.yaaif.local`, always merge the mkcert root CA when present — even if
  * `YAAIF_EXTRA_CA_FILE` / `NODE_EXTRA_CA_CERTS` already set an explicit CA —
- * so Cursor plugin vars or a corporate bundle cannot shadow Traefik trust.
+ * so plugin variables or a corporate bundle cannot shadow Traefik trust.
  */
 export declare function installTlsDispatcher(cfg: Config): TlsMaterial | null;
 export declare function getTlsMaterial(): TlsMaterial;

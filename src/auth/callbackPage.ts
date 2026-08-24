@@ -35,7 +35,7 @@ const LOGO_SVG = `<svg class="ycb-logo" xmlns="http://www.w3.org/2000/svg" viewB
   <circle cx="512" cy="704" r="34" fill="#9CF8FF"/>
 </svg>`;
 
-export type CallbackReturnTo = "Cursor" | "Codex" | "YAA\\F Desktop";
+export type CallbackReturnTo = "Cursor" | "Codex" | "Claude Code" | "YAA\\F Desktop";
 
 export function renderLoginCallbackPage(opts: {
   ok: boolean;

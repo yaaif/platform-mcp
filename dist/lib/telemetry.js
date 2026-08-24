@@ -1,11 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 export class TelemetryStore {
-    cursorHome;
+    stateHome;
     path;
-    constructor(cursorHome) {
-        this.cursorHome = cursorHome;
-        this.path = join(cursorHome, "telemetry.json");
+    constructor(stateHome) {
+        this.stateHome = stateHome;
+        this.path = join(stateHome, "telemetry.json");
     }
     async load() {
         try {
@@ -24,7 +24,7 @@ export class TelemetryStore {
         }
     }
     async save(state) {
-        await mkdir(this.cursorHome, { recursive: true, mode: 0o700 });
+        await mkdir(this.stateHome, { recursive: true, mode: 0o700 });
         const next = { ...state, updated_at: new Date().toISOString() };
         const tmp = `${this.path}.tmp`;
         await writeFile(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });

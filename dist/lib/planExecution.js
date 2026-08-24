@@ -2,8 +2,8 @@ import { mkdir, readFile, rename, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 export class PlanExecutionStore {
     dir;
-    constructor(cursorHome) {
-        this.dir = join(cursorHome, "plan-executions");
+    constructor(stateHome) {
+        this.dir = join(stateHome, "plan-executions");
     }
     file(slug) {
         const safe = slug.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-");

@@ -1,11 +1,11 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type BridgeClient = "cursor" | "codex";
+export type BridgeClient = "cursor" | "codex" | "claude";
 
 export type ClientDescriptor = {
   id: BridgeClient;
-  label: "Cursor" | "Codex";
+  label: "Cursor" | "Codex" | "Claude Code";
   oidcClientId: string;
   stateHomeEnv: string;
   stateHomeSuffix: string;
@@ -28,6 +28,14 @@ const CLIENTS: Record<BridgeClient, ClientDescriptor> = {
     stateHomeEnv: "YAAIF_CODEX_HOME",
     stateHomeSuffix: "codex",
     updatedBy: "yaaif-codex",
+  },
+  claude: {
+    id: "claude",
+    label: "Claude Code",
+    oidcClientId: "yaaif-claude",
+    stateHomeEnv: "YAAIF_CLAUDE_HOME",
+    stateHomeSuffix: "claude",
+    updatedBy: "yaaif-claude",
   },
 };
 
@@ -64,8 +72,8 @@ export function parseBridgeClient(argv = process.argv.slice(2)): ClientDescripto
       return [];
     })
     .filter(Boolean);
-  if (values.length !== 1 || (values[0] !== "cursor" && values[0] !== "codex")) {
-    throw new Error("a single --client cursor|codex argument is required");
+  if (values.length !== 1 || (values[0] !== "cursor" && values[0] !== "codex" && values[0] !== "claude")) {
+    throw new Error("a single --client cursor|codex|claude argument is required");
   }
   return CLIENTS[values[0]];
 }

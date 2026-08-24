@@ -18,7 +18,7 @@ function readOptional(path) {
         return undefined;
     return readFileSync(p, "utf8");
 }
-/** Ignore empty values and unexpanded Cursor plugin placeholders like `${YAAIF_EXTRA_CA_FILE}`. */
+/** Ignore empty values and unexpanded plugin placeholders like `${YAAIF_EXTRA_CA_FILE}`. */
 export function resolvedPath(raw) {
     const v = (raw ?? "").trim();
     if (!v || /^\$\{[A-Z0-9_]+\}$/.test(v))
@@ -115,7 +115,7 @@ export function resolveCaFile(cfg, env = process.env) {
  *
  * For `*.yaaif.local`, always merge the mkcert root CA when present — even if
  * `YAAIF_EXTRA_CA_FILE` / `NODE_EXTRA_CA_CERTS` already set an explicit CA —
- * so Cursor plugin vars or a corporate bundle cannot shadow Traefik trust.
+ * so plugin variables or a corporate bundle cannot shadow Traefik trust.
  */
 export function installTlsDispatcher(cfg) {
     const resolved = resolveCaFile(cfg);

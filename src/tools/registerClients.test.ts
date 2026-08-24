@@ -5,7 +5,7 @@ import { clientDescriptor } from "../config.js";
 import type { Ctx } from "./ctx.js";
 import { registerAllTools } from "./register.js";
 
-function registeredNames(client: "cursor" | "codex"): string[] {
+function registeredNames(client: "cursor" | "codex" | "claude"): string[] {
   const names: string[] = [];
   const server = {
     registerTool(name: string) {
@@ -17,11 +17,13 @@ function registeredNames(client: "cursor" | "codex"): string[] {
   return names.sort();
 }
 
-test("Cursor and Codex descriptors register the same YAAIF MCP tool contract", () => {
+test("Cursor, Codex, and Claude Code descriptors register the same YAAIF MCP tool contract", () => {
   const cursor = registeredNames("cursor");
   const codex = registeredNames("codex");
+  const claude = registeredNames("claude");
 
   assert.equal(new Set(cursor).size, cursor.length);
   assert.ok(cursor.length >= 169);
   assert.deepEqual(codex, cursor);
+  assert.deepEqual(claude, cursor);
 });

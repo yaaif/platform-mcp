@@ -16,15 +16,15 @@ export type Session = {
     profile_id?: string;
     /** OIDC authority / issuer URL at login time. */
     oidc_authority?: string;
-    /** Short-lived Cursor authoring session for files_* / state local tools. */
+    /** Short-lived authoring session for files_* / state local tools. */
     dev_session_id?: string;
-    /** Optional agent id used with the Cursor authoring session. */
+    /** Optional agent id used with the authoring session. */
     dev_agent_id?: string;
 };
 export declare class SessionStore {
     readonly path: string;
-    constructor(cursorHome: string);
-    ensureHome(cursorHome: string): Promise<void>;
+    constructor(stateHome: string);
+    ensureHome(stateHome: string): Promise<void>;
     load(): Promise<Session | null>;
     save(session: Session): Promise<void>;
     clear(): Promise<void>;

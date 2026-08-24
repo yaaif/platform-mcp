@@ -301,7 +301,7 @@ export function registerDoctorTools(server, ctx) {
         return failed.length ? fail(summary, { checks, ready: false }) : ok(summary, { checks, ready: true });
     });
     server.registerTool("yaaif_telemetry_get", {
-        description: "Get anonymous local telemetry opt-in state and counters (~/.yaaif/cursor/telemetry.json).",
+        description: "Get anonymous local telemetry opt-in state and counters from the active YAA\\F client state directory.",
         inputSchema: {},
     }, async () => {
         const state = await ctx.telemetry.load();

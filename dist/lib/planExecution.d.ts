@@ -21,7 +21,7 @@ export type PlanExecution = {
 };
 export declare class PlanExecutionStore {
     readonly dir: string;
-    constructor(cursorHome: string);
+    constructor(stateHome: string);
     private file;
     save(exec: PlanExecution): Promise<PlanExecution>;
     get(slug: string): Promise<PlanExecution | null>;

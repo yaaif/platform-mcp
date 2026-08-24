@@ -39,7 +39,7 @@ export function renderLoginCallbackPage(opts) {
     const isCursor = opts.returnTo === "Cursor";
     const productChip = isCursor
         ? `<span class="ycb-product ycb-product-cursor">${CURSOR_LOGO_SVG}<span>Cursor</span></span>`
-        : `<span class="ycb-product">Desktop</span>`;
+        : `<span class="ycb-product">${returnTo}</span>`;
     const title = opts.ok ? "YAA\\F · Signed in" : "YAA\\F · Sign-in failed";
     const badge = opts.ok ? "Signed in" : "Sign-in failed";
     const icon = opts.ok

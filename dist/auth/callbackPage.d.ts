@@ -1,4 +1,4 @@
-export type CallbackReturnTo = "Cursor" | "YAA\\F Desktop";
+export type CallbackReturnTo = "Cursor" | "Codex" | "Claude Code" | "YAA\\F Desktop";
 export declare function renderLoginCallbackPage(opts: {
     ok: boolean;
     heading: string;

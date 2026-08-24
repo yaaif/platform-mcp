@@ -16,7 +16,7 @@ export async function resolveDevAgentId(ctx, explicit) {
     const sess = await ctx.auth.session();
     return sess?.dev_agent_id?.trim() || undefined;
 }
-/** Reuse persisted Cursor authoring session, or create one via agent-service. */
+/** Reuse the persisted authoring session, or create one via agent-service. */
 export async function ensureDevSession(ctx, opts = {}) {
     if (!opts.force_new) {
         const existing = await resolveDevSessionId(ctx, opts.session_id);

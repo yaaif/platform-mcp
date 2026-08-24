@@ -120,7 +120,7 @@ export function registerLocalTools(server, ctx) {
         }
     });
     server.registerTool("yaaif_dev_session_ensure", {
-        description: "Create or reuse a Cursor authoring chat session for files_* / session_state_* local tools. Auto-picks default skills agent when agent_id omitted. Persists ids in ~/.yaaif/cursor/session.json.",
+        description: `Create or reuse a ${ctx.cfg.client.label} authoring chat session for files_* / session_state_* local tools. Auto-picks default skills agent when agent_id omitted. Persists ids in ${ctx.cfg.stateHome}/session.json.`,
         inputSchema: {
             session_id: z.string().optional(),
             agent_id: z.string().optional(),
@@ -129,7 +129,7 @@ export function registerLocalTools(server, ctx) {
     }, async ({ session_id, agent_id, force_new }) => {
         try {
             const result = await ensureDevSession(ctx, { session_id, agent_id, force_new });
-            return ok(result.reused ? "Reusing Cursor dev session." : "Created Cursor dev session.", result);
+            return ok(result.reused ? `Reusing ${ctx.cfg.client.label} dev session.` : `Created ${ctx.cfg.client.label} dev session.`, result);
         }
         catch (e) {
             return fail(String(e));
@@ -202,7 +202,7 @@ export function registerLocalTools(server, ctx) {
     alias("yaaif_skill_edit_section", "skill_edit_section", "Edit a SKILL.md section via skill_edit_section.");
     alias("yaaif_list_ambient_workflows", "list_ambient_workflows", "List ambient workflows via platform local tool.");
     alias("yaaif_trigger_ambient_workflow", "trigger_ambient_workflow", "Trigger an ambient workflow via platform local tool.");
-    alias("yaaif_files_list", "files_list", "List ingested files for the Cursor/dev session (includes artifact_name/version when present). Call yaaif_dev_session_ensure first.");
+    alias("yaaif_files_list", "files_list", "List ingested files for the active authoring session (includes artifact_name/version when present). Call yaaif_dev_session_ensure first.");
     alias("yaaif_files_search", "files_search", "Search uploaded files by name/preview via files_search. Call yaaif_dev_session_ensure first.");
     alias("yaaif_file_load_context", "file_load_context", "Load extracted text via file_load_context. file_id may be a durable UUID or ADK artifact filename; pass version for a historical revision.");
     alias("yaaif_load_artifacts", "load_artifacts", "ADK-aligned artifact helper: list session/user: artifacts or load by filename/file_id (optional version). Prefer for human-readable names.");
