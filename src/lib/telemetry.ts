@@ -10,8 +10,8 @@ export type TelemetryState = {
 export class TelemetryStore {
   readonly path: string;
 
-  constructor(private readonly cursorHome: string) {
-    this.path = join(cursorHome, "telemetry.json");
+  constructor(private readonly stateHome: string) {
+    this.path = join(stateHome, "telemetry.json");
   }
 
   async load(): Promise<TelemetryState> {
@@ -31,7 +31,7 @@ export class TelemetryStore {
   }
 
   async save(state: TelemetryState): Promise<void> {
-    await mkdir(this.cursorHome, { recursive: true, mode: 0o700 });
+    await mkdir(this.stateHome, { recursive: true, mode: 0o700 });
     const next = { ...state, updated_at: new Date().toISOString() };
     const tmp = `${this.path}.tmp`;
     await writeFile(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });

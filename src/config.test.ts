@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadConfig } from "./config.js";
+import { clientDescriptor, loadConfig, parseBridgeClient } from "./config.js";
 
 test("loadConfig reads env defaults", () => {
   process.env.YAAIF_OIDC_AUTHORITY = "https://example.com/auth/realms/yaaif";
@@ -37,4 +37,22 @@ test("loadConfig ignores unexpanded plugin placeholders", () => {
   assert.equal(cfg.controlPlaneBaseUrl, "https://platform.yaaif.ai/control-plane-service");
   assert.equal(cfg.approvalBaseUrl, "https://platform.yaaif.ai/approval-service");
   assert.equal(cfg.oidcClientId, "yaaif-cursor");
+});
+
+test("Codex defaults use isolated state and OIDC client", () => {
+  delete process.env.YAAIF_OIDC_CLIENT_ID;
+  delete process.env.YAAIF_CODEX_HOME;
+  process.env.YAAIF_STATE_HOME = "/tmp/legacy-shared-state";
+  const cfg = loadConfig(clientDescriptor("codex"));
+  assert.equal(cfg.oidcClientId, "yaaif-codex");
+  assert.match(cfg.stateHome, /\.yaaif\/codex$/);
+  assert.equal(cfg.client.updatedBy, "yaaif-codex");
+  delete process.env.YAAIF_STATE_HOME;
+});
+
+test("parseBridgeClient requires exactly one supported client", () => {
+  assert.equal(parseBridgeClient(["--client", "codex"]).id, "codex");
+  assert.equal(parseBridgeClient(["--client=cursor"]).id, "cursor");
+  assert.throws(() => parseBridgeClient([]), /--client cursor\|codex/);
+  assert.throws(() => parseBridgeClient(["--client", "unknown"]), /--client cursor\|codex/);
 });

@@ -29,8 +29,8 @@ export type PlanExecution = {
 export class PlanExecutionStore {
   readonly dir: string;
 
-  constructor(cursorHome: string) {
-    this.dir = join(cursorHome, "plan-executions");
+  constructor(stateHome: string) {
+    this.dir = join(stateHome, "plan-executions");
   }
 
   private file(slug: string): string {

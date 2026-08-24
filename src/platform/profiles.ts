@@ -40,48 +40,55 @@ function deriveServiceUrls(apiBase: string) {
   };
 }
 
-export const BUILTIN_PROFILES: PlatformProfile[] = [
-  {
-    id: "hosted",
-    label: "Hosted (platform.yaaif.ai)",
-    description: "Production / hosted YAA\\F — OIDC and APIs on platform.yaaif.ai",
-    builtin: true,
-    oidc_authority: "https://platform.yaaif.ai/auth/realms/yaaif",
-    ...deriveServiceUrls("https://platform.yaaif.ai"),
-    oidc_client_id: "yaaif-cursor",
-  },
-  {
-    id: "local-hybrid",
-    label: "Local hybrid (OIDC .com + APIs .local)",
-    description:
-      "Local Traefik APIs on platform.yaaif.local with Keycloak issuer platform.yaaif.com (tunnel)",
-    builtin: true,
-    oidc_authority: "https://platform.yaaif.com/auth/realms/yaaif",
-    ...deriveServiceUrls("https://platform.yaaif.local"),
-    oidc_client_id: "yaaif-cursor",
-  },
-  {
-    id: "local",
-    label: "Local (all .local)",
-    description: "OIDC and APIs on platform.yaaif.local",
-    builtin: true,
-    oidc_authority: "https://platform.yaaif.local/auth/realms/yaaif",
-    ...deriveServiceUrls("https://platform.yaaif.local"),
-    oidc_client_id: "yaaif-cursor",
-  },
-];
+export function builtinProfiles(oidcClientId = "yaaif-cursor"): PlatformProfile[] {
+  return [
+    {
+      id: "hosted",
+      label: "Hosted (platform.yaaif.ai)",
+      description: "Production / hosted YAA\\F — OIDC and APIs on platform.yaaif.ai",
+      builtin: true,
+      oidc_authority: "https://platform.yaaif.ai/auth/realms/yaaif",
+      ...deriveServiceUrls("https://platform.yaaif.ai"),
+      oidc_client_id: oidcClientId,
+    },
+    {
+      id: "local-hybrid",
+      label: "Local hybrid (OIDC .com + APIs .local)",
+      description:
+        "Local Traefik APIs on platform.yaaif.local with Keycloak issuer platform.yaaif.com (tunnel)",
+      builtin: true,
+      oidc_authority: "https://platform.yaaif.com/auth/realms/yaaif",
+      ...deriveServiceUrls("https://platform.yaaif.local"),
+      oidc_client_id: oidcClientId,
+    },
+    {
+      id: "local",
+      label: "Local (all .local)",
+      description: "OIDC and APIs on platform.yaaif.local",
+      builtin: true,
+      oidc_authority: "https://platform.yaaif.local/auth/realms/yaaif",
+      ...deriveServiceUrls("https://platform.yaaif.local"),
+      oidc_client_id: oidcClientId,
+    },
+  ];
+}
+
+export const BUILTIN_PROFILES: PlatformProfile[] = builtinProfiles();
 
 export class ProfileStore {
   readonly customPath: string;
   readonly activePath: string;
 
-  constructor(private readonly cursorHome: string) {
-    this.customPath = join(cursorHome, "profiles.json");
-    this.activePath = join(cursorHome, "active-profile.json");
+  constructor(
+    private readonly stateHome: string,
+    private readonly defaultOidcClientId = "yaaif-cursor",
+  ) {
+    this.customPath = join(stateHome, "profiles.json");
+    this.activePath = join(stateHome, "active-profile.json");
   }
 
   async ensureHome(): Promise<void> {
-    await mkdir(this.cursorHome, { recursive: true, mode: 0o700 });
+    await mkdir(this.stateHome, { recursive: true, mode: 0o700 });
   }
 
   async listCustom(): Promise<PlatformProfile[]> {
@@ -103,7 +110,7 @@ export class ProfileStore {
 
   async upsertCustom(profile: PlatformProfile): Promise<PlatformProfile> {
     const id = profile.id.trim().toLowerCase();
-    if (!id || BUILTIN_PROFILES.some((b) => b.id === id)) {
+    if (!id || builtinProfiles(this.defaultOidcClientId).some((b) => b.id === id)) {
       throw new Error(`profile id '${id}' is reserved or invalid`);
     }
     const cleaned: PlatformProfile = {
@@ -120,7 +127,7 @@ export class ProfileStore {
       approval_base_url: trimSlash(
         profile.approval_base_url || `${trimSlash(profile.api_base_url)}/approval-service`,
       ),
-      oidc_client_id: profile.oidc_client_id || "yaaif-cursor",
+      oidc_client_id: profile.oidc_client_id || this.defaultOidcClientId,
       extra_ca_file: profile.extra_ca_file?.trim() || undefined,
       client_cert_file: profile.client_cert_file?.trim() || undefined,
       client_key_file: profile.client_key_file?.trim() || undefined,
@@ -141,7 +148,7 @@ export class ProfileStore {
   }
 
   async listAll(): Promise<PlatformProfile[]> {
-    return [...BUILTIN_PROFILES, ...(await this.listCustom())];
+    return [...builtinProfiles(this.defaultOidcClientId), ...(await this.listCustom())];
   }
 
   async get(profileId: string): Promise<PlatformProfile | null> {
@@ -187,7 +194,7 @@ export function applyProfileToConfig(cfg: Config, profile: PlatformProfile): Con
 export function inferProfileId(cfg: Config): string {
   const api = trimSlash(cfg.apiBaseUrl);
   const oidc = trimSlash(cfg.oidcAuthority);
-  for (const p of BUILTIN_PROFILES) {
+  for (const p of builtinProfiles(cfg.client.oidcClientId)) {
     if (trimSlash(p.api_base_url) === api && trimSlash(p.oidc_authority) === oidc) return p.id;
   }
   return cfg.activeProfileId || "custom-env";

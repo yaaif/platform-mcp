@@ -20,21 +20,21 @@ export type Session = {
   profile_id?: string;
   /** OIDC authority / issuer URL at login time. */
   oidc_authority?: string;
-  /** Short-lived Cursor authoring session for files_* / state local tools. */
+  /** Short-lived authoring session for files_* / state local tools. */
   dev_session_id?: string;
-  /** Optional agent id used with the Cursor authoring session. */
+  /** Optional agent id used with the authoring session. */
   dev_agent_id?: string;
 };
 
 export class SessionStore {
   readonly path: string;
 
-  constructor(cursorHome: string) {
-    this.path = join(cursorHome, "session.json");
+  constructor(stateHome: string) {
+    this.path = join(stateHome, "session.json");
   }
 
-  async ensureHome(cursorHome: string): Promise<void> {
-    await mkdir(cursorHome, { recursive: true, mode: 0o700 });
+  async ensureHome(stateHome: string): Promise<void> {
+    await mkdir(stateHome, { recursive: true, mode: 0o700 });
   }
 
   async load(): Promise<Session | null> {

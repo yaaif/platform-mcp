@@ -148,7 +148,7 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
 
   server.registerTool("yaaif_dev_session_ensure", {
     description:
-      "Create or reuse a Cursor authoring chat session for files_* / session_state_* local tools. Auto-picks default skills agent when agent_id omitted. Persists ids in ~/.yaaif/cursor/session.json.",
+      `Create or reuse a ${ctx.cfg.client.label} authoring chat session for files_* / session_state_* local tools. Auto-picks default skills agent when agent_id omitted. Persists ids in ${ctx.cfg.stateHome}/session.json.`,
     inputSchema: {
       session_id: z.string().optional(),
       agent_id: z.string().optional(),
@@ -158,7 +158,7 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
     try {
       const result = await ensureDevSession(ctx, { session_id, agent_id, force_new });
       return ok(
-        result.reused ? "Reusing Cursor dev session." : "Created Cursor dev session.",
+        result.reused ? `Reusing ${ctx.cfg.client.label} dev session.` : `Created ${ctx.cfg.client.label} dev session.`,
         result,
       );
     } catch (e) {
@@ -242,7 +242,7 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
   alias(
     "yaaif_files_list",
     "files_list",
-    "List ingested files for the Cursor/dev session (includes artifact_name/version when present). Call yaaif_dev_session_ensure first.",
+    "List ingested files for the active authoring session (includes artifact_name/version when present). Call yaaif_dev_session_ensure first.",
   );
   alias(
     "yaaif_files_search",

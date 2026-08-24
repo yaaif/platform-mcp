@@ -198,7 +198,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_platform_export", {
-    description: "Export active profile as shell exports and Cursor plugin variable JSON.",
+    description: "Export active profile as shell environment values for the active YAA\\F client.",
     inputSchema: {},
   }, async () => {
     const exported = exportProfileEnv(ctx.cfg);
@@ -209,7 +209,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_platform_save", {
-    description: "Save or update a custom platform profile under ~/.yaaif/cursor/profiles.json.",
+    description: "Save or update a custom platform profile in the active YAA\\F client state directory.",
     inputSchema: {
       id: z.string(),
       label: z.string().optional(),
@@ -339,7 +339,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
 
   server.registerTool("yaaif_login_device", {
     description:
-      "Headless/CI device-code login (Keycloak device grant). Requires oauth2.device.authorization.grant.enabled on yaaif-cursor.",
+      "Headless/CI device-code login (Keycloak device grant). Requires oauth2.device.authorization.grant.enabled on the active OIDC client.",
     inputSchema: { timeout_ms: z.number().optional() },
   }, async ({ timeout_ms }) => {
     try {
@@ -367,7 +367,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_logout", {
-    description: "Clear the local YAA\\F Cursor session. Optionally open Keycloak end_session.",
+    description: "Clear the local YAA\\F client session. Optionally open Keycloak end_session.",
     inputSchema: { end_session: z.boolean().optional() },
   }, async ({ end_session }) => {
     const result = await ctx.auth.logout({ endSession: Boolean(end_session) });

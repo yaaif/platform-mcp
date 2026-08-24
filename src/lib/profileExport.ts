@@ -2,7 +2,10 @@ import type { Config } from "../config.js";
 
 export function exportProfileEnv(cfg: Config): {
   shell: string;
-  cursor_plugin_variables: Record<string, string>;
+  client: Config["client"]["id"];
+  client_variables: Record<string, string>;
+  cursor_plugin_variables?: Record<string, string>;
+  codex_plugin_variables?: Record<string, string>;
 } {
   const vars: Record<string, string> = {
     YAAIF_PLATFORM_PROFILE: cfg.activeProfileId || "",
@@ -23,7 +26,14 @@ export function exportProfileEnv(cfg: Config): {
     .map(([k, v]) => `export ${k}=${shellQuote(v)}`)
     .join("\n");
 
-  return { shell, cursor_plugin_variables: vars };
+  return {
+    shell,
+    client: cfg.client.id,
+    client_variables: vars,
+    ...(cfg.client.id === "cursor"
+      ? { cursor_plugin_variables: vars }
+      : { codex_plugin_variables: vars }),
+  };
 }
 
 function shellQuote(v: string): string {

@@ -35,7 +35,7 @@ const LOGO_SVG = `<svg class="ycb-logo" xmlns="http://www.w3.org/2000/svg" viewB
   <circle cx="512" cy="704" r="34" fill="#9CF8FF"/>
 </svg>`;
 
-export type CallbackReturnTo = "Cursor" | "YAA\\F Desktop";
+export type CallbackReturnTo = "Cursor" | "Codex" | "YAA\\F Desktop";
 
 export function renderLoginCallbackPage(opts: {
   ok: boolean;
@@ -50,7 +50,7 @@ export function renderLoginCallbackPage(opts: {
   const isCursor = opts.returnTo === "Cursor";
   const productChip = isCursor
     ? `<span class="ycb-product ycb-product-cursor">${CURSOR_LOGO_SVG}<span>Cursor</span></span>`
-    : `<span class="ycb-product">Desktop</span>`;
+    : `<span class="ycb-product">${returnTo}</span>`;
   const title = opts.ok ? "YAA\\F · Signed in" : "YAA\\F · Sign-in failed";
   const badge = opts.ok ? "Signed in" : "Sign-in failed";
   const icon = opts.ok

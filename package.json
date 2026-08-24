@@ -1,7 +1,7 @@
 {
-  "name": "@yaaif/cursor-mcp",
-  "version": "1.1.0",
-  "description": "YAA\\F Cursor MCP bridge \u2014 ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
+  "name": "@yaaif/platform-mcp",
+  "version": "1.2.0",
+  "description": "YAA\\F platform MCP bridge for Cursor and Codex — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
   "author": "YAA\\F / BeezLabs",
@@ -11,7 +11,7 @@
     "directory": "packages/mcp"
   },
   "bin": {
-    "yaaif-cursor-mcp": "dist/cli.js"
+    "yaaif-platform-mcp": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "files": [
@@ -20,10 +20,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs && npm run bundle",
-    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-cursor-mcp.mjs --packages=bundle",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-platform-mcp.mjs --packages=bundle && esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-cursor-mcp.mjs --packages=bundle",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "generate:local-tools-ref": "node ./scripts/generate-local-tools-ref.mjs",
-    "start": "node dist/cli.js",
+    "start": "node dist/cli.js --client cursor",
+    "start:codex": "node dist/cli.js --client codex",
     "prepublishOnly": "npm test && npm run build"
   },
   "engines": {

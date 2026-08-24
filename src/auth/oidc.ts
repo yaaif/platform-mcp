@@ -86,7 +86,7 @@ export class AuthClient {
   }
 
   async login(): Promise<{ session: Session; auth_url: string }> {
-    await this.store.ensureHome(this.cfg.cursorHome);
+    await this.store.ensureHome(this.cfg.stateHome);
     const verifier = b64url(randomBytes(32));
     const challenge = b64url(createHash("sha256").update(verifier).digest());
     const state = b64url(randomBytes(24));
@@ -128,8 +128,8 @@ export class AuthClient {
             renderLoginCallbackPage({
               ok: false,
               heading: "Sign-in could not be verified",
-              message: "The sign-in response did not match this login attempt. Start login again from Cursor.",
-              returnTo: "Cursor",
+              message: `The sign-in response did not match this login attempt. Start login again from ${this.cfg.client.label}.`,
+              returnTo: this.cfg.client.label,
             }),
           );
           clearTimeout(timer);
@@ -144,7 +144,7 @@ export class AuthClient {
               ok: false,
               heading: "Sign-in was not completed",
               message: `The identity provider returned ${err}.`,
-              returnTo: "Cursor",
+              returnTo: this.cfg.client.label,
             }),
           );
           clearTimeout(timer);
@@ -159,7 +159,7 @@ export class AuthClient {
               ok: false,
               heading: "Sign-in was not completed",
               message: "The authorization code was missing from the sign-in response.",
-              returnTo: "Cursor",
+              returnTo: this.cfg.client.label,
             }),
           );
           clearTimeout(timer);
@@ -173,7 +173,7 @@ export class AuthClient {
             heading: "You're signed in",
             message: "Authentication finished successfully.",
             detail: this.cfg.oidcAuthority,
-            returnTo: "Cursor",
+            returnTo: this.cfg.client.label,
           }),
         );
         clearTimeout(timer);
@@ -217,7 +217,7 @@ export class AuthClient {
     verification_uri: string;
     user_code: string;
   }> {
-    await this.store.ensureHome(this.cfg.cursorHome);
+    await this.store.ensureHome(this.cfg.stateHome);
     const deviceEndpoint = `${this.cfg.oidcAuthority}/protocol/openid-connect/auth/device`;
     const startBody = new URLSearchParams({
       client_id: this.cfg.oidcClientId,
@@ -232,7 +232,7 @@ export class AuthClient {
     if (!startRes.ok) {
       throw new Error(
         `device auth start failed (${startRes.status}): ${JSON.stringify(startRaw)}. ` +
-          "Enable oauth2.device.authorization.grant.enabled on the yaaif-cursor Keycloak client.",
+          `Enable oauth2.device.authorization.grant.enabled on the ${this.cfg.oidcClientId} Keycloak client.`,
       );
     }
     const deviceCode = String(startRaw.device_code ?? "");

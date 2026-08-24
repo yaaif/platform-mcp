@@ -136,7 +136,7 @@ function registerSkills(server: McpServer, ctx: Ctx): void {
       allowed_tools: args.allowed_tools ?? tools,
       classification: args.classification || "general",
       enabled: args.enabled ?? true,
-      updated_by: args.updated_by || "yaaif-cursor",
+      updated_by: args.updated_by || ctx.cfg.client.updatedBy,
       assigned_user_emails: args.assigned_user_emails ?? [],
       scaffold: {
         include_references: args.include_references ?? true,
@@ -174,7 +174,7 @@ function registerSkills(server: McpServer, ctx: Ctx): void {
   }, async ({ skill_id, enabled, updated_by }) => {
     try {
       const skill = await ctx.api.agentJSON("POST", "/api/skills/enablement", {
-        skill_id, enabled, updated_by: updated_by || "yaaif-cursor",
+        skill_id, enabled, updated_by: updated_by || ctx.cfg.client.updatedBy,
       });
       return ok(`Skill ${skill_id} enabled=${enabled}.`, { skill });
     } catch (e) { return fail(String(e)); }

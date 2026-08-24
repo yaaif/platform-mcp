@@ -32,3 +32,14 @@ test("error page escapes untrusted text", () => {
   assert.match(html, /class="ycb-err"/);
   assert.match(html, /Sign-in failed/);
 });
+
+test("Codex callback page uses Codex return copy without Cursor branding", () => {
+  const html = renderLoginCallbackPage({
+    ok: true,
+    heading: "You're signed in",
+    message: "Authentication finished successfully.",
+    returnTo: "Codex",
+  });
+  assert.match(html, /return to Codex/);
+  assert.doesNotMatch(html, /aria-label="Cursor"/);
+});

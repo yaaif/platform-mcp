@@ -24,7 +24,7 @@ export async function resolveDevAgentId(ctx: Ctx, explicit?: string): Promise<st
   return sess?.dev_agent_id?.trim() || undefined;
 }
 
-/** Reuse persisted Cursor authoring session, or create one via agent-service. */
+/** Reuse the persisted authoring session, or create one via agent-service. */
 export async function ensureDevSession(
   ctx: Ctx,
   opts: { session_id?: string; agent_id?: string; force_new?: boolean } = {},

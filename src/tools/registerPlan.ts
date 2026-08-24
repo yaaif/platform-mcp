@@ -135,8 +135,7 @@ export function registerPlanTools(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_plan_execution_save", {
-    description:
-      "Persist a plan execution checklist (step statuses + result ids) under ~/.yaaif/cursor/plan-executions/ for resume.",
+    description: "Persist a plan execution checklist (step statuses + result ids) in the active YAA\\F client state directory for resume.",
     inputSchema: {
       slug: z.string(),
       plan_path: z.string().optional(),

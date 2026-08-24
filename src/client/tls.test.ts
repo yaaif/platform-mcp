@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { Config } from "../config.js";
+import { clientDescriptor, type Config } from "../config.js";
 import {
   configUsesLocalDevHosts,
   discoverMkcertCaCandidates,
@@ -13,6 +13,7 @@ import {
 
 function baseCfg(over: Partial<Config> = {}): Config {
   return {
+    client: clientDescriptor("cursor"),
     oidcAuthority: "https://platform.yaaif.com/auth/realms/yaaif",
     oidcClientId: "yaaif-cursor",
     oidcScopes: ["openid"],
@@ -21,7 +22,7 @@ function baseCfg(over: Partial<Config> = {}): Config {
     controlPlaneBaseUrl: "https://platform.yaaif.local/control-plane-service",
     approvalBaseUrl: "https://platform.yaaif.local/approval-service",
     defaultTenantId: "",
-    cursorHome: "/tmp/yaaif-cursor-test",
+    stateHome: "/tmp/yaaif-cursor-test",
     activeProfileId: "local-hybrid",
     extraCaFile: "",
     clientCertFile: "",
