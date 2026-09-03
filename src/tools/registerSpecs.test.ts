@@ -6,6 +6,7 @@ import type { Ctx } from "./ctx.js";
 import { registerSpecTools } from "./registerSpecs.js";
 
 type RegisteredTool = {
+  description?: string;
   inputSchema: Record<string, z.ZodType>;
   handler: (args: Record<string, unknown>) => Promise<unknown>;
 };
@@ -13,8 +14,12 @@ type RegisteredTool = {
 function registeredTools() {
   const tools = new Map<string, RegisteredTool>();
   const server = {
-    registerTool(name: string, definition: { inputSchema: Record<string, z.ZodType> }, handler: RegisteredTool["handler"]) {
-      tools.set(name, { inputSchema: definition.inputSchema, handler });
+    registerTool(
+      name: string,
+      definition: { description?: string; inputSchema: Record<string, z.ZodType> },
+      handler: RegisteredTool["handler"],
+    ) {
+      tools.set(name, { description: definition.description, inputSchema: definition.inputSchema, handler });
     },
   } as unknown as McpServer;
   return { server, tools };
@@ -132,4 +137,17 @@ test("Scenario MCP tools validate versioned payloads and preserve evidence prove
 
   const backfillSchema = z.object(backfill.inputSchema);
   assert.equal(backfillSchema.safeParse({ spec_id: "spec-1", expected_version: 4, preview_hash: "short" }).success, false);
+});
+
+test("Scenario sync tools describe apply versus adopt", () => {
+  const { server, tools } = registeredTools();
+  registerSpecTools(server, { api: { agentJSON: async () => ({}) } } as unknown as Ctx);
+
+  const apply = tools.get("yaaif_agent_spec_sync_to_objects");
+  const adopt = tools.get("yaaif_agent_spec_sync_from_objects");
+  const preview = tools.get("yaaif_agent_spec_sync_preview");
+  assert.ok(apply && adopt && preview);
+  assert.match(String(apply.description), /Apply Scenario-owned names/);
+  assert.match(String(adopt.description), /Adopt live catalog objects/);
+  assert.match(String(preview.description), /to_objects: spec → catalog/);
 });

@@ -460,7 +460,7 @@ export function registerSpecTools(server: McpServer, ctx: Ctx): void {
     "yaaif_agent_spec_sync_workflow_design",
     {
       description:
-        "Copy bound ambient workflow graphs into the Scenario workflow_design segment. Prefer yaaif_agent_spec_sync_from_objects for a full catalog pull.",
+        "Copy bound ambient workflow graphs into the Scenario workflow_design segment. This is an explicit adopt of live graphs. Prefer yaaif_agent_spec_sync_to_objects to apply Scenario-owned workflow_design onto catalog objects.",
       inputSchema: {
         spec_id: z.string(),
         expected_version: expectedVersionSchema,
@@ -485,7 +485,7 @@ export function registerSpecTools(server: McpServer, ctx: Ctx): void {
     "yaaif_agent_spec_sync_from_objects",
     {
       description:
-        "Legacy shortcut for applying a live-catalog pull. Call yaaif_agent_spec_sync_preview first, then use yaaif_agent_spec_sync_apply.",
+        "Adopt live catalog objects into the Scenario (explicit). Overwrites Scenario-owned names and workflow graphs. Preview with yaaif_agent_spec_sync_preview (from_objects), then apply. Not the default finish step after create/bind.",
       inputSchema: {
         spec_id: z.string(),
         expected_version: expectedVersionSchema,
@@ -511,7 +511,7 @@ export function registerSpecTools(server: McpServer, ctx: Ctx): void {
     "yaaif_agent_spec_sync_to_objects",
     {
       description:
-        "Legacy shortcut for applying a Scenario-to-catalog sync. Call yaaif_agent_spec_sync_preview first, then use yaaif_agent_spec_sync_apply.",
+        "Apply Scenario-owned names and workflow_design onto bound catalog objects. Preview with yaaif_agent_spec_sync_preview (to_objects), then apply. Skill pack files are not overwritten.",
       inputSchema: {
         spec_id: z.string(),
         expected_version: expectedVersionSchema,
@@ -1094,7 +1094,7 @@ export function registerSpecTools(server: McpServer, ctx: Ctx): void {
     "yaaif_agent_spec_sync_preview",
     {
       description:
-        "Preview object-vs-Scenario changes. This is read-only and must precede sync apply.",
+        "Preview apply (to_objects: spec → catalog) or adopt (from_objects: catalog → spec). Read-only; must precede sync apply.",
       inputSchema: {
         spec_id: z.string(),
         direction: z.enum(["from_objects", "to_objects"]),
@@ -1118,7 +1118,7 @@ export function registerSpecTools(server: McpServer, ctx: Ctx): void {
     "yaaif_agent_spec_sync_apply",
     {
       description:
-        "Apply a reviewed sync preview with the matching Scenario version; clears the resolved conflict set.",
+        "Apply a reviewed preview: to_objects writes the Scenario onto bound catalog objects; from_objects adopts live catalog drift into the Scenario.",
       inputSchema: {
         spec_id: z.string(),
         expected_version: expectedVersionSchema,
