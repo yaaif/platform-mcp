@@ -20,6 +20,23 @@ test("success page includes logo, issuer, and Cursor copy", () => {
   assert.match(html, /aria-label="Cursor"/);
 });
 
+test("success page tries to close and includes a fallback when the browser blocks it", () => {
+  const html = renderLoginCallbackPage({
+    ok: true,
+    heading: "You're signed in",
+    message: "Authentication finished successfully.",
+    returnTo: "Cursor",
+  });
+  assert.doesNotMatch(html, /onclick="window\.close\(\)"/);
+  assert.match(html, /function tryClose/);
+  assert.doesNotMatch(html, /window\.open\("", "_self"\)/);
+  assert.match(html, /showFallback/);
+  assert.match(html, /Your browser will not close this tab/);
+  assert.match(html, /Close it to return to Cursor/);
+  assert.match(html, /tryClose\(\);/);
+  assert.match(html, /id="ycb-close"/);
+});
+
 test("error page escapes untrusted text", () => {
   const html = renderLoginCallbackPage({
     ok: false,
@@ -31,6 +48,21 @@ test("error page escapes untrusted text", () => {
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /class="ycb-err"/);
   assert.match(html, /Sign-in failed/);
+});
+
+test("error page keeps Close control but does not auto-close on load", () => {
+  const html = renderLoginCallbackPage({
+    ok: false,
+    heading: "Sign-in was not completed",
+    message: "The identity provider returned access_denied.",
+    returnTo: "Cursor",
+  });
+  assert.match(html, /id="ycb-close"/);
+  assert.match(html, /function tryClose/);
+  assert.match(html, /Your browser will not close this tab/);
+  assert.doesNotMatch(html, /onclick="window\.close\(\)"/);
+  const autoCloseOnLoad = html.match(/if \(closeBtn\) closeBtn\.addEventListener\("click", tryClose\);\s*tryClose\(\);/);
+  assert.equal(autoCloseOnLoad, null);
 });
 
 test("Codex callback page uses Codex return copy without Cursor branding", () => {

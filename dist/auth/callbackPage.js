@@ -217,6 +217,15 @@ code {
   cursor: pointer;
 }
 .ycb-close:hover { filter: brightness(.96); }
+.ycb-fallback {
+  display: none;
+  margin-top: 1.2rem;
+  color: var(--ycb-muted);
+  line-height: 1.5;
+  font-size: .95rem;
+}
+.ycb-fallback.is-visible { display: block; }
+.ycb-close.is-hidden { display: none; }
 </style>
 </head>
 <body class="${opts.ok ? "ycb-ok" : "ycb-err"}">
@@ -230,8 +239,33 @@ code {
     <p class="ycb-copy">${message}</p>
     ${detail}
     <p class="ycb-return">You can close this window and return to ${returnTo}.</p>
-    <button class="ycb-close" type="button" onclick="window.close()">Close window</button>
+    <button class="ycb-close" id="ycb-close" type="button">Close window</button>
+    <p class="ycb-fallback" id="ycb-fallback" hidden>Your browser will not close this tab. Close it to return to ${returnTo}.</p>
   </main>
+  <script>
+(function () {
+  var closeBtn = document.getElementById("ycb-close");
+  var fallback = document.getElementById("ycb-fallback");
+  function showFallback() {
+    if (closeBtn) {
+      closeBtn.classList.add("is-hidden");
+      closeBtn.setAttribute("hidden", "");
+    }
+    if (fallback) {
+      fallback.removeAttribute("hidden");
+      fallback.classList.add("is-visible");
+    }
+  }
+  function tryClose() {
+    try { window.close(); } catch (e) {}
+    window.setTimeout(function () {
+      if (!document.hidden) showFallback();
+    }, 250);
+  }
+  if (closeBtn) closeBtn.addEventListener("click", tryClose);
+  ${opts.ok ? "tryClose();" : ""}
+})();
+  </script>
 </body>
 </html>`;
 }
