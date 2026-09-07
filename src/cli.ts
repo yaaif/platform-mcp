@@ -8,10 +8,18 @@ import { installTlsDispatcher } from "./client/tls.js";
 import { loadConfig, parseBridgeClient } from "./config.js";
 import { PlanExecutionStore } from "./lib/planExecution.js";
 import { TelemetryStore } from "./lib/telemetry.js";
+import { parseSetupAction, runInstallerSetup } from "./lib/installerSetup.js";
 import { applyActiveProfile, applyProfileToConfig, ProfileStore } from "./platform/profiles.js";
 import { registerAllTools } from "./tools/register.js";
 
 async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const setup = parseSetupAction(argv);
+  if (setup) {
+    const code = await runInstallerSetup(setup, { argv });
+    process.exit(code);
+  }
+
   const cfg = loadConfig(parseBridgeClient());
   const store = new SessionStore(cfg.stateHome);
   await store.ensureHome(cfg.stateHome);

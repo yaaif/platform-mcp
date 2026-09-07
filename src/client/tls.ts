@@ -260,6 +260,22 @@ export async function yaaifFetch(input: string | URL, init: RequestInit = {}): P
       },
     );
     req.on("error", reject);
+    req.setTimeout(30_000, () => {
+      req.destroy(new Error(`request timed out: ${url.toString()}`));
+    });
+    if (init.signal) {
+      if (init.signal.aborted) {
+        req.destroy();
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        return;
+      }
+      const onAbort = () => {
+        req.destroy();
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      };
+      init.signal.addEventListener("abort", onAbort, { once: true });
+      req.on("close", () => init.signal?.removeEventListener("abort", onAbort));
+    }
     if (body != null) req.write(body);
     req.end();
   });
