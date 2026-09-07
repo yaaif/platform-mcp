@@ -12,7 +12,7 @@ node dist/cli.js --client codex
 Or via npx after publish:
 
 ```bash
-npx -y @yaaif/platform-mcp@1.2.0 --client codex
+npx -y @yaaif/platform-mcp@1.3.0 --client codex
 ```
 
 Use `--client cursor` for the backwards-compatible Cursor integration. Codex
