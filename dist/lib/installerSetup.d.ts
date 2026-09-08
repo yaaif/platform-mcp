@@ -42,6 +42,7 @@ export declare function parsePlatformPromptAnswer(raw: string, opts: {
 export declare function shouldPromptPlatform(action: SetupAction, argv: string[], opts?: {
     interactive?: boolean;
     prompt?: PlatformPromptFn;
+    env?: NodeJS.ProcessEnv;
 }): boolean;
 export declare function chooseDetectedProfile(opts: {
     existingId?: string | null;

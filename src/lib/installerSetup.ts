@@ -123,14 +123,15 @@ function isCiEnv(env: NodeJS.ProcessEnv = process.env): boolean {
 export function shouldPromptPlatform(
   action: SetupAction,
   argv: string[],
-  opts: { interactive?: boolean; prompt?: PlatformPromptFn } = {},
+  opts: { interactive?: boolean; prompt?: PlatformPromptFn; env?: NodeJS.ProcessEnv } = {},
 ): boolean {
   if (action === "detect" || action === "whoami") return false;
   if (parseProfileFlag(argv) || parseYaaifUrl(argv)) return false;
   if (opts.prompt) return true;
   if (opts.interactive === false) return false;
-  if (isCiEnv()) return false;
-  return opts.interactive === true || Boolean(stdIn.isTTY);
+  if (opts.interactive === true) return true;
+  if (isCiEnv(opts.env)) return false;
+  return Boolean(stdIn.isTTY);
 }
 
 async function defaultPromptPlatform(input: {

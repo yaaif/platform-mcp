@@ -85,9 +85,11 @@ export function shouldPromptPlatform(action, argv, opts = {}) {
         return true;
     if (opts.interactive === false)
         return false;
-    if (isCiEnv())
+    if (opts.interactive === true)
+        return true;
+    if (isCiEnv(opts.env))
         return false;
-    return opts.interactive === true || Boolean(stdIn.isTTY);
+    return Boolean(stdIn.isTTY);
 }
 async function defaultPromptPlatform(input) {
     const rl = createInterface({ input: stdIn, output: stdErr });

@@ -54,7 +54,8 @@ test("shouldPromptPlatform skips detect, flags, and interactive=false", () => {
   assert.equal(shouldPromptPlatform("all", ["--profile", "hosted"], { interactive: true }), false);
   assert.equal(shouldPromptPlatform("all", ["--yaaif-url", "https://x.example"], { interactive: true }), false);
   assert.equal(shouldPromptPlatform("all", ["--client", "claude"], { interactive: false }), false);
-  assert.equal(shouldPromptPlatform("all", ["--client", "claude"], { interactive: true }), true);
+  assert.equal(shouldPromptPlatform("all", ["--client", "claude"], { interactive: true, env: { CI: "true" } }), true);
+  assert.equal(shouldPromptPlatform("all", ["--client", "claude"], { env: { CI: "true" } }), false);
 });
 
 test("chooseDetectedProfile keeps existing, then hosted, then local-hybrid, then local, else hosted", () => {
