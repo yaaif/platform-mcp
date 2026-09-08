@@ -4,7 +4,7 @@ import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/t
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
 import { ensureDevSession } from "../lib/devSession.js";
-import { checkInstallerUpdate } from "../lib/installerUpdate.js";
+import { collectInstallHealth, cursorPluginDest } from "../lib/pluginInstall.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
 
@@ -330,11 +330,11 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
       }
     }
 
-    try {
-      const upd = await checkInstallerUpdate(ctx.cfg.stateHome);
-      add("installer_update", upd.ok, upd.detail);
-    } catch (e) {
-      add("installer_update", true, { skipped: "error", error: String(e).slice(0, 180) });
+    for (const health of collectInstallHealth({
+      client: ctx.cfg.client.id,
+      cursorDest: ctx.cfg.client.id === "cursor" ? cursorPluginDest() : undefined,
+    })) {
+      add(health.name, health.ok, health.detail);
     }
 
     const failed = checks.filter((c) => !c.ok);

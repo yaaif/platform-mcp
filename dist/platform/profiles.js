@@ -3,13 +3,70 @@ import { join } from "node:path";
 function trimSlash(v) {
     return v.replace(/\/+$/, "");
 }
-function deriveServiceUrls(apiBase) {
+export function deriveServiceUrls(apiBase) {
     const base = trimSlash(apiBase);
     return {
         api_base_url: base,
         agent_base_url: `${base}/agent-service`,
         control_plane_base_url: `${base}/control-plane-service`,
         approval_base_url: `${base}/approval-service`,
+    };
+}
+const OIDC_PATH = /\/auth\/realms\/[^/]+\/?$/i;
+export const HOSTED_PLATFORM_URL = "https://platform.yaaif.ai";
+export const LOCAL_PLATFORM_URL = "https://platform.yaaif.local";
+export function normalizePlatformUrl(raw) {
+    let s = raw.trim();
+    if (!s)
+        throw new Error("YAAIF URL is empty");
+    if (!/^https?:\/\//i.test(s))
+        s = `https://${s}`;
+    let parsed;
+    try {
+        parsed = new URL(s);
+    }
+    catch {
+        throw new Error(`invalid YAAIF URL: ${raw}`);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error(`YAAIF URL must be http(s) (got ${parsed.protocol})`);
+    }
+    parsed.hash = "";
+    parsed.search = "";
+    parsed.pathname = parsed.pathname.replace(OIDC_PATH, "");
+    if (parsed.pathname === "/")
+        parsed.pathname = "";
+    return trimSlash(parsed.toString());
+}
+export function profileIdFromHostname(hostname) {
+    const slug = hostname
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    const id = slug || "custom";
+    if (id === "hosted" || id === "local" || id === "local-hybrid")
+        return `custom-${id}`;
+    if (/^[0-9]/.test(id))
+        return `p-${id}`;
+    return id;
+}
+/** Map a platform base (or OIDC) URL to hosted, local, or a custom profile. */
+export function profileFromPlatformUrl(raw, oidcClientId = "yaaif-cursor") {
+    const api = normalizePlatformUrl(raw);
+    const host = new URL(api).hostname.toLowerCase();
+    const builtins = builtinProfiles(oidcClientId);
+    if (host === "platform.yaaif.ai")
+        return builtins.find((p) => p.id === "hosted");
+    if (host === "platform.yaaif.local")
+        return builtins.find((p) => p.id === "local");
+    return {
+        id: profileIdFromHostname(host),
+        label: api,
+        description: `Custom YAA\\F at ${api}`,
+        builtin: false,
+        oidc_authority: `${api}/auth/realms/yaaif`,
+        ...deriveServiceUrls(api),
+        oidc_client_id: oidcClientId,
     };
 }
 export function builtinProfiles(oidcClientId = "yaaif-cursor") {

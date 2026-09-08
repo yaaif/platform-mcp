@@ -21,6 +21,18 @@ export type ActiveProfileState = {
     profile_id: string;
     updated_at: string;
 };
+export declare function deriveServiceUrls(apiBase: string): {
+    api_base_url: string;
+    agent_base_url: string;
+    control_plane_base_url: string;
+    approval_base_url: string;
+};
+export declare const HOSTED_PLATFORM_URL = "https://platform.yaaif.ai";
+export declare const LOCAL_PLATFORM_URL = "https://platform.yaaif.local";
+export declare function normalizePlatformUrl(raw: string): string;
+export declare function profileIdFromHostname(hostname: string): string;
+/** Map a platform base (or OIDC) URL to hosted, local, or a custom profile. */
+export declare function profileFromPlatformUrl(raw: string, oidcClientId?: string): PlatformProfile;
 export declare function builtinProfiles(oidcClientId?: string): PlatformProfile[];
 export declare const BUILTIN_PROFILES: PlatformProfile[];
 export declare class ProfileStore {

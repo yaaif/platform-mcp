@@ -3,7 +3,7 @@ import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/t
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
 import { ensureDevSession } from "../lib/devSession.js";
-import { checkInstallerUpdate } from "../lib/installerUpdate.js";
+import { collectInstallHealth, cursorPluginDest } from "../lib/pluginInstall.js";
 import { fail, ok } from "./helpers.js";
 function tlsHint(err, tls = getTlsResolveInfo()) {
     const msg = String(err);
@@ -295,12 +295,11 @@ export function registerDoctorTools(server, ctx) {
                 void ctx.telemetry.increment(routeOk ? "doctor_ops_telemetry_ok" : "doctor_ops_telemetry_fail");
             }
         }
-        try {
-            const upd = await checkInstallerUpdate(ctx.cfg.stateHome);
-            add("installer_update", upd.ok, upd.detail);
-        }
-        catch (e) {
-            add("installer_update", true, { skipped: "error", error: String(e).slice(0, 180) });
+        for (const health of collectInstallHealth({
+            client: ctx.cfg.client.id,
+            cursorDest: ctx.cfg.client.id === "cursor" ? cursorPluginDest() : undefined,
+        })) {
+            add(health.name, health.ok, health.detail);
         }
         const failed = checks.filter((c) => !c.ok);
         const summary = failed.length

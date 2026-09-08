@@ -1,6 +1,6 @@
 {
   "name": "@yaaif/platform-mcp",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "description": "YAA\\F platform MCP bridge for Cursor, Codex, and Claude Code — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
@@ -11,7 +11,8 @@
     "directory": "packages/mcp"
   },
   "bin": {
-    "yaaif-platform-mcp": "dist/cli.js"
+    "yaaif-platform-mcp": "dist/cli.js",
+    "platform-mcp": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "files": [
@@ -19,7 +20,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs && npm run bundle",
+    "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs && npm run bundle && node ./scripts/link-local-bin.mjs",
+    "prepare": "node ./scripts/link-local-bin.mjs",
     "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-platform-mcp.mjs --packages=bundle && esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-cursor-mcp.mjs --packages=bundle",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "generate:local-tools-ref": "node ./scripts/generate-local-tools-ref.mjs",
