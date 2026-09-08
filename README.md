@@ -2,7 +2,7 @@
 
 Stdio MCP bridge and Node installer for the YAAIF **Cursor**, **Claude Code**, and **Codex** plugins.
 
-Plugin contract **1.3.0**. This package **1.3.2**. Each IDE keeps its own login state and OIDC client. You do **not** need the `yaaif-platform` monorepo.
+Plugin contract **1.3.0**. This package **1.3.2**. Each IDE keeps its own login state and OIDC client.
 
 `--install` writes the platform profile and (for Cursor) copies plugin files. It does **not** register the plugin in the IDE. Finish in Cursor / Claude / Codex after the CLI exits.
 
@@ -30,7 +30,7 @@ Install these on the **same OS** as the IDE (do not mix WSL Node with Windows Cu
 
 **Operator (once per environment):** enable public Keycloak clients `yaaif-cursor`, `yaaif-claude`, and `yaaif-codex` (PKCE, no client secret).
 
-**Not required:** the monorepo, Go/Python/Docker, native `.pkg` / `.msi` / `.deb` installers, S2S secrets, desktop connection keys, or AI-gateway keys.
+**Not required:** Go/Python/Docker, native `.pkg` / `.msi` / `.deb` installers, S2S secrets, desktop connection keys, or AI-gateway keys.
 
 Run `npx` from your **home directory**, not from `packages/mcp` (that path fails with `yaaif-platform-mcp: command not found`).
 
