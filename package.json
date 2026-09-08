@@ -1,6 +1,6 @@
 {
   "name": "@yaaif/platform-mcp",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "YAA\\F platform MCP bridge for Cursor, Codex, and Claude Code — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), API keys, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
