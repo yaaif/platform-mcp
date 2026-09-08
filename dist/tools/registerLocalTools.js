@@ -136,7 +136,7 @@ export function registerLocalTools(server, ctx) {
         }
     });
     server.registerTool("yaaif_skill_tools_check", {
-        description: "Verify skill frontmatter tools / allowed-tools (or an explicit tools list) exist in local tools or external MCP catalog. Run before skill create.",
+        description: "Verify skill frontmatter tools / allowed-tools (or an explicit tools list) exist in local tools or external MCP catalog. Server wildcards such as sap-odata:* are accepted. Also use allowed-prompts / allowed-resources from markdown. Run before skill create.",
         inputSchema: {
             markdown: z.string().optional(),
             tools: z.array(z.string()).optional(),

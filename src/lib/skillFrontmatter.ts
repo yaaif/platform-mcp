@@ -59,6 +59,22 @@ export function extractSkillToolsFromMarkdown(markdown: string): string[] {
   return dedupe(parseYamlStringList(block, ["tools"]));
 }
 
+export function extractSkillPromptsFromMarkdown(markdown: string): string[] {
+  const block = extractFrontmatterBlock(markdown);
+  if (!block) return [];
+  return dedupe(parseYamlStringList(block, ["allowed-prompts", "allowed_prompts"]));
+}
+
+export function extractSkillResourcesFromMarkdown(markdown: string): string[] {
+  const block = extractFrontmatterBlock(markdown);
+  if (!block) return [];
+  return dedupe(parseYamlStringList(block, ["allowed-resources", "allowed_resources"]));
+}
+
+export function isServerWildcardToken(token: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,126}:\*$/.test(token.trim());
+}
+
 function dedupe(items: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -93,7 +109,9 @@ export function verifyToolsAgainstCatalogs(
   const missing: string[] = [];
   for (const tool of tools) {
     const key = tool.toLowerCase();
-    if (localSet.has(key)) {
+    if (isServerWildcardToken(tool)) {
+      found_mcp.push(tool);
+    } else if (localSet.has(key)) {
       found_local.push(tool);
     } else if (mcpSet.has(key)) {
       found_mcp.push(tool);

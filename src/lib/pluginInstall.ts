@@ -8,7 +8,7 @@ import type { BridgeClient } from "../config.js";
 import { parseBridgeClient } from "../config.js";
 import { runInstallerSetup, type PlatformPromptFn, type ProfileProbeFn } from "./installerSetup.js";
 
-export const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.3";
+export const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.4";
 
 export const CURSOR_MCP_ENV: Record<string, string> = {
   YAAIF_PLATFORM_PROFILE: "${YAAIF_PLATFORM_PROFILE}",

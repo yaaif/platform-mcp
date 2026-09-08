@@ -1,6 +1,6 @@
 import type { BridgeClient } from "../config.js";
 import { type PlatformPromptFn, type ProfileProbeFn } from "./installerSetup.js";
-export declare const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.3";
+export declare const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.4";
 export declare const CURSOR_MCP_ENV: Record<string, string>;
 export declare const CLAUDE_MCP_ENV: Record<string, string>;
 export type InstallOptions = {

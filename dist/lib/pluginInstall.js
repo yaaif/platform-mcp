@@ -6,7 +6,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBridgeClient } from "../config.js";
 import { runInstallerSetup } from "./installerSetup.js";
-export const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.3";
+export const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.4";
 export const CURSOR_MCP_ENV = {
     YAAIF_PLATFORM_PROFILE: "${YAAIF_PLATFORM_PROFILE}",
     YAAIF_OIDC_AUTHORITY: "${YAAIF_OIDC_AUTHORITY}",

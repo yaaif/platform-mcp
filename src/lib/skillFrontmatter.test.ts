@@ -31,6 +31,17 @@ tools: [files_list, file_load_context]
   assert.deepEqual(extractSkillToolsFromMarkdown(md), ["files_list", "file_load_context"]);
 });
 
+test("verifyToolsAgainstCatalogs accepts server wildcards", () => {
+  const result = verifyToolsAgainstCatalogs(
+    ["sap-odata:*", "files_list"],
+    ["files_list"],
+    [],
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.found_mcp, ["sap-odata:*"]);
+  assert.deepEqual(result.found_local, ["files_list"]);
+});
+
 test("verifyToolsAgainstCatalogs splits local vs mcp vs missing", () => {
   const result = verifyToolsAgainstCatalogs(
     ["files_list", "get_invoice", "not_real"],

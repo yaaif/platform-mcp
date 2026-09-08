@@ -2,7 +2,7 @@
 
 Stdio MCP bridge and Node installer for the YAAIF **Cursor**, **Claude Code**, and **Codex** plugins.
 
-Plugin contract **1.3.0**. This package **1.3.3**. Each IDE keeps its own login state and OIDC client.
+Plugin contract **1.3.0**. This package **1.3.4**. Each IDE keeps its own login state and OIDC client.
 
 `--install` writes the platform profile and (for Cursor) copies plugin files. It does **not** register the plugin in the IDE. Finish in Cursor / Claude / Codex after the CLI exits.
 
@@ -19,7 +19,7 @@ Install these on the **same OS** as the IDE (do not mix WSL Node with Windows Cu
 | Dependency | Requirement | Who |
 | --- | --- | --- |
 | **Node.js** | ≥ 20 (`node -v`). Provides `npx`. | All |
-| **npm package** | `@yaaif/platform-mcp@1.3.3` must be **Published** (`npm view @yaaif/platform-mcp version`) | All |
+| **npm package** | `@yaaif/platform-mcp@1.3.4` must be **Published** (`npm view @yaaif/platform-mcp version`) | All |
 | **Git** | Clone Cursor plugin; Claude/Codex marketplace add clones GitHub | Cursor always; Claude/Codex marketplace |
 | **Browser** | OIDC PKCE sign-in | All |
 | **Cursor Desktop** | Plugins + MCP | Cursor |
@@ -43,24 +43,24 @@ cd ~
 The CLI asks you to choose hosted `https://platform.yaaif.ai` or another YAAIF URL.
 
 ```bash
-npx -y @yaaif/platform-mcp@1.3.3 --install --client cursor|claude|codex
+npx -y @yaaif/platform-mcp@1.3.4 --install --client cursor|claude|codex
 ```
 
 Non-interactive:
 
 ```bash
-npx -y @yaaif/platform-mcp@1.3.3 --install --client claude --yaaif-url https://your.yaaif.host
-npx -y @yaaif/platform-mcp@1.3.3 --install --client cursor --profile hosted --plugin-src ./cursor-plugin
+npx -y @yaaif/platform-mcp@1.3.4 --install --client claude --yaaif-url https://your.yaaif.host
+npx -y @yaaif/platform-mcp@1.3.4 --install --client cursor --profile hosted --plugin-src ./cursor-plugin
 ```
 
 `--no-login` skips the browser. `--offline` pins absolute `node` + `cli.js` for Claude/Codex (Cursor always uses absolute `node` + `cli.js`). `--force` overwrites a newer Cursor dest. `--cli-path` is required if the running CLI lives under an `npx` cache.
 
 ### Air-gap
 
-On a machine with npm: `npm pack @yaaif/platform-mcp@1.3.3`. Copy the `.tgz` plus the plugin clone.
+On a machine with npm: `npm pack @yaaif/platform-mcp@1.3.4`. Copy the `.tgz` plus the plugin clone.
 
 ```bash
-npm install -g ./yaaif-platform-mcp-1.3.3.tgz
+npm install -g ./yaaif-platform-mcp-1.3.4.tgz
 yaaif-platform-mcp --install --client cursor|claude|codex --plugin-src <dir> --offline
 ```
 
@@ -73,7 +73,7 @@ yaaif-platform-mcp --install --client cursor|claude|codex --plugin-src <dir> --o
    ```bash
    cd ~
    git clone https://github.com/yaaif/cursor-plugin.git
-   npx -y @yaaif/platform-mcp@1.3.3 --install --client cursor --plugin-src ./cursor-plugin
+   npx -y @yaaif/platform-mcp@1.3.4 --install --client cursor --plugin-src ./cursor-plugin
    ```
 
    Choose hosted or your YAAIF URL and complete browser login.
@@ -96,7 +96,7 @@ Marketplace alternative (when published): install **yaaif** from Cursor Marketpl
 
    ```bash
    cd ~
-   npx -y @yaaif/platform-mcp@1.3.3 --install --client claude
+   npx -y @yaaif/platform-mcp@1.3.4 --install --client claude
    ```
 
 2. **Add marketplace and install plugin (required)**
@@ -113,7 +113,7 @@ Marketplace alternative (when published): install **yaaif** from Cursor Marketpl
 3. **New session**  
    Quit Claude Code, open a new session, optionally `/plugin configure yaaif-platform@yaaif`, then `/yaaif-platform:yaaif-login` and `/yaaif-platform:yaaif-doctor`.
 
-MCP start command: `npx -y @yaaif/platform-mcp@1.3.3 --client claude`.
+MCP start command: `npx -y @yaaif/platform-mcp@1.3.4 --client claude`.
 
 ---
 
@@ -123,7 +123,7 @@ MCP start command: `npx -y @yaaif/platform-mcp@1.3.3 --client claude`.
 
    ```bash
    cd ~
-   npx -y @yaaif/platform-mcp@1.3.3 --install --client codex
+   npx -y @yaaif/platform-mcp@1.3.4 --install --client codex
    ```
 
 2. **Add marketplace and install plugin (required)**
@@ -137,7 +137,7 @@ MCP start command: `npx -y @yaaif/platform-mcp@1.3.3 --client claude`.
 3. **Verify**  
    `$yaaif-login` then `$yaaif-doctor`. Codex has no `userConfig` and no `commands/`; short names are alias skills.
 
-MCP start command: `npx -y @yaaif/platform-mcp@1.3.3 --client codex`.
+MCP start command: `npx -y @yaaif/platform-mcp@1.3.4 --client codex`.
 
 ---
 
