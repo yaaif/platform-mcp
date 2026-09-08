@@ -2,7 +2,7 @@
 
 Stdio MCP bridge and Node installer for the YAAIF **Cursor**, **Claude Code**, and **Codex** plugins.
 
-Plugin contract **1.3.0**. This package **1.3.4**. Each IDE keeps its own login state and OIDC client.
+Plugin contract **1.3.2**. This package **1.3.4**. Each IDE keeps its own login state and OIDC client.
 
 `--install` writes the platform profile and (for Cursor) copies plugin files. It does **not** register the plugin in the IDE. Finish in Cursor / Claude / Codex after the CLI exits.
 
