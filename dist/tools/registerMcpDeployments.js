@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 import { deploymentLogsPath, deploymentToUpdateBody, normalizeTransportType, resolveDeploymentMethod, } from "../lib/mcpDeployments.js";
 const secretEnvSchema = z.array(z.object({
     env_name: z.string(),
@@ -364,8 +365,7 @@ export function registerMcpDeploymentTools(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         const path = `/api/mcp-deployments${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed MCP deployments.", { result: await ctx.api.apiJSON("GET", path) });

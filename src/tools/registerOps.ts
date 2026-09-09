@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 
 export function registerOpsTools(server: McpServer, ctx: Ctx): void {
   const decisionBody = {
@@ -87,7 +88,7 @@ export function registerOpsTools(server: McpServer, ctx: Ctx): void {
   }, async ({ status_scope, limit, offset }) => {
     const params = new URLSearchParams();
     if (status_scope) params.set("status_scope", status_scope);
-    if (limit) params.set("limit", String(limit));
+    appendClampedLimit(params, limit);
     if (offset) params.set("offset", String(offset));
     const path = `/api/approval/inbox/tasks${params.size ? `?${params}` : ""}`;
     try {

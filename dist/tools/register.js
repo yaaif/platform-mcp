@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit, clampCatalogLimit } from "../lib/catalogLimits.js";
 import { mergeSkillIds } from "../lib/mergeSkillIds.js";
 import { ENGINE_SPINE_ONLY_WARNING, isEngineSpineOnlyGraph } from "../lib/workflowGraph.js";
 import { registerAuthTools } from "./registerAuth.js";
@@ -14,6 +15,7 @@ import { registerFileTools } from "./registerFiles.js";
 import { registerOpsSupportTools } from "./registerOpsSupport.js";
 import { registerApiKeyTools } from "./registerApiKeys.js";
 import { registerMcpDeploymentTools } from "./registerMcpDeployments.js";
+import { registerUserTools } from "./registerUsers.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +27,7 @@ export function registerAllTools(server, ctx) {
     registerMcp(server, ctx);
     registerMcpDeploymentTools(server, ctx);
     registerApiKeyTools(server, ctx);
+    registerUserTools(server, ctx);
     registerDesktopTools(server, ctx);
     registerApprovalTools(server, ctx);
     registerPlanTools(server, ctx);
@@ -43,8 +46,7 @@ function registerSkills(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         const path = `/api/skills${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed skills.", { result: await ctx.api.agentJSON("GET", path) });
@@ -288,7 +290,7 @@ function registerAmbient(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        params.set("limit", String(Math.min(Math.max(limit ?? 50, 1), 200)));
+        params.set("limit", String(clampCatalogLimit(limit, 50)));
         const path = `/api/agents?${params}`;
         try {
             const result = await ctx.api.agentJSON("GET", path);
@@ -326,8 +328,7 @@ function registerAmbient(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         const path = `/api/ambient/agents${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed ambient agents.", { result: await ctx.api.agentJSON("GET", path) });
@@ -616,8 +617,7 @@ function registerAmbient(server, ctx) {
             params.set("status", args.status);
         if (args.q)
             params.set("q", args.q);
-        if (args.limit)
-            params.set("limit", String(args.limit));
+        appendClampedLimit(params, args.limit);
         const path = `/api/ambient/runs${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed ambient runs.", { result: await ctx.api.agentJSON("GET", path) });
@@ -768,8 +768,7 @@ function registerMcp(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         const path = `/api/mcp-tools${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed MCP tools.", { result: await ctx.api.agentJSON("GET", path) });
@@ -798,8 +797,7 @@ function registerMcp(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         const path = `/api/mcp-tools/servers${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed MCP servers.", { result: await ctx.api.agentJSON("GET", path) });
@@ -828,7 +826,7 @@ function registerMcp(server, ctx) {
             limit: z.number().optional(),
         },
     }, async ({ q, limit }) => {
-        const lim = limit && limit > 0 ? limit : 50;
+        const lim = clampCatalogLimit(limit, 50);
         const params = new URLSearchParams({ limit: String(lim) });
         if (q)
             params.set("q", q);

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 import {
   deploymentLogsPath,
   deploymentToUpdateBody,
@@ -418,7 +419,7 @@ export function registerMcpDeploymentTools(server: McpServer, ctx: Ctx): void {
   }, async ({ q, limit }) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
-    if (limit) params.set("limit", String(limit));
+    appendClampedLimit(params, limit);
     const path = `/api/mcp-deployments${params.size ? `?${params}` : ""}`;
     try {
       return ok("Listed MCP deployments.", { result: await ctx.api.apiJSON("GET", path) });

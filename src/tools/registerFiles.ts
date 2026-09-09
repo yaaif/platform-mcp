@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 import { resolveDevSessionId } from "../lib/devSession.js";
 
 /**
@@ -112,7 +113,7 @@ export function registerFileTools(server: McpServer, ctx: Ctx): void {
     }
     const params = new URLSearchParams({ session_id: sessionId });
     if (latest_only) params.set("latest_only", "true");
-    if (limit && limit > 0) params.set("limit", String(limit));
+    appendClampedLimit(params, limit);
     try {
       const result = await ctx.api.agentJSON("GET", `/api/files?${params}`);
       return ok("Listed session files.", { result, session_id: sessionId, latest_only: Boolean(latest_only) });

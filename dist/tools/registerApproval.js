@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 function defaultStrategyDefinition(objectType, approverEmail) {
     return {
         object_type: objectType,
@@ -35,8 +36,7 @@ export function registerApprovalTools(server, ctx) {
         },
     }, async ({ limit, offset }) => {
         const params = new URLSearchParams();
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         if (offset)
             params.set("offset", String(offset));
         const path = `/api/approval/strategies${params.size ? `?${params}` : ""}`;

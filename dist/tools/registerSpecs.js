@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 const slotSchema = z.object({
     slot_key: z.string(),
     kind: z.string(),
@@ -206,8 +207,7 @@ export function registerSpecTools(server, ctx) {
             params.set("q", args.q);
         if (args.status)
             params.set("status", args.status);
-        if (args.limit)
-            params.set("limit", String(args.limit));
+        appendClampedLimit(params, args.limit);
         const path = `/api/agent-specs${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed scenarios.", {

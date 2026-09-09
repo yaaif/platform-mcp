@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { clampCatalogLimit } from "../lib/catalogLimits.js";
 import { extractCatalogBuckets, verifyPlanAgainstCatalog } from "../lib/planCatalog.js";
 async function loadCatalogSnapshot(ctx, q, limit) {
-    const lim = limit && limit > 0 ? limit : 100;
+    const lim = clampCatalogLimit(limit, 100);
     const params = new URLSearchParams({ limit: String(lim) });
     if (q)
         params.set("q", q);

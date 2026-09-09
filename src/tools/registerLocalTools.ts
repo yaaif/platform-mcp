@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit, listAllMcpToolNames } from "../lib/catalogLimits.js";
 import {
   extractSkillToolsFromMarkdown,
   verifyToolsAgainstCatalogs,
@@ -69,7 +70,7 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
     const params = new URLSearchParams();
     if (family) params.set("family", family);
     if (q) params.set("q", q);
-    if (limit && limit > 0) params.set("limit", String(limit));
+    appendClampedLimit(params, limit);
     if (offset && offset >= 0) params.set("offset", String(offset));
     if (names_only) params.set("names_only", "true");
     const path = `/api/local-tools${params.size ? `?${params}` : ""}`;
@@ -182,14 +183,13 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
       if (!list.length) {
         return fail("No tools found — pass markdown with frontmatter or tools[].");
       }
-      const [localRes, mcpRes] = await Promise.all([
+      const [localRes, mcpNames] = await Promise.all([
         ctx.api.agentJSON<LocalToolsListResponse>("GET", "/api/local-tools?names_only=true"),
-        ctx.api.agentJSON<{ items?: Array<{ name?: string }> }>("GET", "/api/mcp-tools?limit=500"),
+        listAllMcpToolNames((path) => ctx.api.agentJSON("GET", path)),
       ]);
       const localNames = Array.isArray(localRes.names)
         ? localRes.names
         : (localRes.items ?? []).map((i) => String(i.name ?? "")).filter(Boolean);
-      const mcpNames = (mcpRes.items ?? []).map((i) => String(i.name ?? "").trim()).filter(Boolean);
       const result = verifyToolsAgainstCatalogs(list, localNames, mcpNames);
       void ctx.telemetry.increment(result.ok ? "skill_tools_check_ok" : "skill_tools_check_fail");
       return result.ok

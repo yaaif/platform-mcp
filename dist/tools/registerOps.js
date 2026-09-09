@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 export function registerOpsTools(server, ctx) {
     const decisionBody = {
         note: z.string().optional(),
@@ -81,8 +82,7 @@ export function registerOpsTools(server, ctx) {
         const params = new URLSearchParams();
         if (status_scope)
             params.set("status_scope", status_scope);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         if (offset)
             params.set("offset", String(offset));
         const path = `/api/approval/inbox/tasks${params.size ? `?${params}` : ""}`;

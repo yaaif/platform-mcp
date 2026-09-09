@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 export function registerDesktopTools(server, ctx) {
     server.registerTool("yaaif_desktop_workers_list", {
         description: "List desktop workers in the tenant (control-plane).",
@@ -8,8 +9,7 @@ export function registerDesktopTools(server, ctx) {
         const params = new URLSearchParams();
         if (q)
             params.set("q", q);
-        if (limit)
-            params.set("limit", String(limit));
+        appendClampedLimit(params, limit);
         const path = `/api/desktop/workers${params.size ? `?${params}` : ""}`;
         try {
             return ok("Listed desktop workers.", {

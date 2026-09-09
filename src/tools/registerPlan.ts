@@ -2,11 +2,12 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+import { clampCatalogLimit } from "../lib/catalogLimits.js";
 import { extractCatalogBuckets, verifyPlanAgainstCatalog } from "../lib/planCatalog.js";
 import type { PlanExecStep, PlanExecution } from "../lib/planExecution.js";
 
 async function loadCatalogSnapshot(ctx: Ctx, q?: string, limit?: number) {
-  const lim = limit && limit > 0 ? limit : 100;
+  const lim = clampCatalogLimit(limit, 100);
   const params = new URLSearchParams({ limit: String(lim) });
   if (q) params.set("q", q);
   const qs = `?${params}`;

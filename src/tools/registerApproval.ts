@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
+import { appendClampedLimit } from "../lib/catalogLimits.js";
 
 function defaultStrategyDefinition(objectType: string, approverEmail: string) {
   return {
@@ -39,7 +40,7 @@ export function registerApprovalTools(server: McpServer, ctx: Ctx): void {
     },
   }, async ({ limit, offset }) => {
     const params = new URLSearchParams();
-    if (limit) params.set("limit", String(limit));
+    appendClampedLimit(params, limit);
     if (offset) params.set("offset", String(offset));
     const path = `/api/approval/strategies${params.size ? `?${params}` : ""}`;
     try {
