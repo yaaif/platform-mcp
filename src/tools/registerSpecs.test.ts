@@ -151,3 +151,28 @@ test("Scenario sync tools describe apply versus adopt", () => {
   assert.match(String(adopt.description), /Adopt live catalog objects/);
   assert.match(String(preview.description), /to_objects: spec → catalog/);
 });
+
+test("yaaif_agent_spec_delete requires a positive expected_version and calls DELETE", async () => {
+  const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+  const { server, tools } = registeredTools();
+  registerSpecTools(server, {
+    api: {
+      agentJSON: async (method: string, path: string, body?: unknown) => {
+        calls.push({ method, path, body });
+        return undefined;
+      },
+    },
+  } as unknown as Ctx);
+
+  const del = tools.get("yaaif_agent_spec_delete");
+  assert.ok(del);
+  assert.match(String(del.description), /empty Scenario/);
+  const schema = z.object(del.inputSchema);
+  assert.equal(schema.safeParse({ spec_id: "spec-1", expected_version: 0 }).success, false);
+  await del.handler({ spec_id: "spec-1", expected_version: 3 });
+  assert.deepEqual(calls.at(-1), {
+    method: "DELETE",
+    path: "/api/agent-specs/spec-1?expected_version=3",
+    body: undefined,
+  });
+});
