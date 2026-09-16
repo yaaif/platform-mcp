@@ -111,6 +111,7 @@ export class AuthClient {
                         ok: false,
                         heading: "Sign-in could not be verified",
                         message: `The sign-in response did not match this login attempt. Start login again from ${this.cfg.client.label}.`,
+                        returnTo: this.cfg.client.label,
                     }));
                     clearTimeout(timer);
                     reject(new Error("invalid oauth state"));
@@ -122,6 +123,7 @@ export class AuthClient {
                         ok: false,
                         heading: "Sign-in was not completed",
                         message: `The identity provider returned ${err}.`,
+                        returnTo: this.cfg.client.label,
                     }));
                     clearTimeout(timer);
                     reject(new Error(`oauth error: ${err}`));
@@ -133,6 +135,7 @@ export class AuthClient {
                         ok: false,
                         heading: "Sign-in was not completed",
                         message: "The authorization code was missing from the sign-in response.",
+                        returnTo: this.cfg.client.label,
                     }));
                     clearTimeout(timer);
                     reject(new Error("missing authorization code"));
@@ -143,6 +146,7 @@ export class AuthClient {
                     heading: "You're signed in",
                     message: "Authentication finished successfully.",
                     detail: this.cfg.oidcAuthority,
+                    returnTo: this.cfg.client.label,
                 }));
                 clearTimeout(timer);
                 resolve(authCode);

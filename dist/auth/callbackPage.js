@@ -6,6 +6,10 @@ function escapeHtml(value) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 }
+/** Official Cursor 2D cube from https://cursor.com/brand (CUBE_2D). Geometry unchanged. */
+const CURSOR_LOGO_SVG = `<svg class="ycb-cursor-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 466.73 532.09" role="img" aria-label="Cursor">
+  <path fill="currentColor" d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"/>
+</svg>`;
 const LOGO_SVG = `<svg class="ycb-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="YAA\\F">
   <defs>
     <linearGradient id="ycb-bg" x1="132" y1="96" x2="904" y2="920" gradientUnits="userSpaceOnUse">
@@ -31,6 +35,11 @@ const LOGO_SVG = `<svg class="ycb-logo" xmlns="http://www.w3.org/2000/svg" viewB
 export function renderLoginCallbackPage(opts) {
     const heading = escapeHtml(opts.heading);
     const message = escapeHtml(opts.message);
+    const returnTo = escapeHtml(opts.returnTo);
+    const isCursor = opts.returnTo === "Cursor";
+    const productChip = isCursor
+        ? `<span class="ycb-product ycb-product-cursor">${CURSOR_LOGO_SVG}<span>Cursor</span></span>`
+        : `<span class="ycb-product">${returnTo}</span>`;
     const title = opts.ok ? "YAA\\F · Signed in" : "YAA\\F · Sign-in failed";
     const badge = opts.ok ? "Signed in" : "Sign-in failed";
     const icon = opts.ok
@@ -123,7 +132,7 @@ body {
 .ycb-brand {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: .75rem;
   margin-bottom: 1.35rem;
 }
@@ -139,6 +148,25 @@ body {
   font-size: 1.05rem;
   font-weight: 650;
   letter-spacing: -.02em;
+}
+.ycb-product {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ycb-fg);
+  border: 1px solid var(--ycb-border);
+  border-radius: 999px;
+  padding: .28rem .65rem .28rem .5rem;
+}
+.ycb-cursor-logo {
+  width: 1.15rem;
+  height: 1.3rem;
+  display: block;
+  color: var(--ycb-fg);
+  flex: 0 0 auto;
 }
 .ycb-badge {
   display: inline-flex;
@@ -204,14 +232,15 @@ code {
   <main class="ycb-card">
     <div class="ycb-brand">
       <div class="ycb-brand-mark">${LOGO_SVG}<p class="ycb-wordmark">YAA\\F</p></div>
+      ${productChip}
     </div>
     <div class="ycb-badge">${icon}${escapeHtml(badge)}</div>
     <h1>${heading}</h1>
     <p class="ycb-copy">${message}</p>
     ${detail}
-    <p class="ycb-return">You can close this window and continue.</p>
+    <p class="ycb-return">You can close this window and return to ${returnTo}.</p>
     <button class="ycb-close" id="ycb-close" type="button">Close window</button>
-    <p class="ycb-fallback" id="ycb-fallback" hidden>Your browser will not close this tab. Close it to continue.</p>
+    <p class="ycb-fallback" id="ycb-fallback" hidden>Your browser will not close this tab. Close it to return to ${returnTo}.</p>
   </main>
   <script>
 (function () {

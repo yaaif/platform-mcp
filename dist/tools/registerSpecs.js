@@ -104,21 +104,6 @@ export function registerSpecTools(server, ctx) {
             return fail(String(e));
         }
     });
-    server.registerTool("yaaif_agent_spec_delete", {
-        description: "Delete an empty Scenario (Agent Spec). Allowed only when it has no current catalog bindings, is not active, and is not a required release dependency of another scenario.",
-        inputSchema: {
-            spec_id: z.string(),
-            expected_version: expectedVersionSchema,
-        },
-    }, async ({ spec_id, expected_version }) => {
-        try {
-            await ctx.api.agentJSON("DELETE", `${specPath(spec_id)}?expected_version=${expected_version}`);
-            return ok(`Deleted empty scenario ${spec_id}.`, { spec_id });
-        }
-        catch (e) {
-            return fail(String(e));
-        }
-    });
     server.registerTool("yaaif_agent_spec_policy_export", {
         description: "Export the portable Scenario tenant policy document for review or promotion across environments.",
         inputSchema: {},
