@@ -1,11 +1,11 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type BridgeClient = "cursor" | "codex" | "claude";
+export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude";
 
 export type ClientDescriptor = {
   id: BridgeClient;
-  label: "Cursor" | "Codex" | "Claude Code";
+  label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code";
   oidcClientId: string;
   stateHomeEnv: string;
   stateHomeSuffix: string;
@@ -20,6 +20,22 @@ const CLIENTS: Record<BridgeClient, ClientDescriptor> = {
     stateHomeEnv: "YAAIF_CURSOR_HOME",
     stateHomeSuffix: "cursor",
     updatedBy: "yaaif-cursor",
+  },
+  vscode: {
+    id: "vscode",
+    label: "VS Code",
+    oidcClientId: "yaaif-vscode",
+    stateHomeEnv: "YAAIF_VSCODE_HOME",
+    stateHomeSuffix: "vscode",
+    updatedBy: "yaaif-vscode",
+  },
+  intellij: {
+    id: "intellij",
+    label: "IntelliJ IDEA",
+    oidcClientId: "yaaif-intellij",
+    stateHomeEnv: "YAAIF_INTELLIJ_HOME",
+    stateHomeSuffix: "intellij",
+    updatedBy: "yaaif-intellij",
   },
   codex: {
     id: "codex",
@@ -72,10 +88,13 @@ export function parseBridgeClient(argv = process.argv.slice(2)): ClientDescripto
       return [];
     })
     .filter(Boolean);
-  if (values.length !== 1 || (values[0] !== "cursor" && values[0] !== "codex" && values[0] !== "claude")) {
-    throw new Error("a single --client cursor|codex|claude argument is required");
+  if (
+    values.length !== 1 ||
+    !["cursor", "vscode", "intellij", "codex", "claude"].includes(values[0])
+  ) {
+    throw new Error("a single --client cursor|vscode|intellij|codex|claude argument is required");
   }
-  return CLIENTS[values[0]];
+  return CLIENTS[values[0] as BridgeClient];
 }
 
 function trimSlash(v: string): string {

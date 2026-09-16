@@ -50,9 +50,27 @@ test("Codex defaults use isolated state and OIDC client", () => {
   delete process.env.YAAIF_STATE_HOME;
 });
 
+test("VS Code and IntelliJ defaults use isolated state and OIDC clients", () => {
+  delete process.env.YAAIF_OIDC_CLIENT_ID;
+  delete process.env.YAAIF_VSCODE_HOME;
+  delete process.env.YAAIF_INTELLIJ_HOME;
+
+  const vscode = loadConfig(clientDescriptor("vscode"));
+  assert.equal(vscode.oidcClientId, "yaaif-vscode");
+  assert.match(vscode.stateHome, /\.yaaif\/vscode$/);
+  assert.equal(vscode.client.updatedBy, "yaaif-vscode");
+
+  const intellij = loadConfig(clientDescriptor("intellij"));
+  assert.equal(intellij.oidcClientId, "yaaif-intellij");
+  assert.match(intellij.stateHome, /\.yaaif\/intellij$/);
+  assert.equal(intellij.client.updatedBy, "yaaif-intellij");
+});
+
 test("parseBridgeClient requires exactly one supported client", () => {
   assert.equal(parseBridgeClient(["--client", "codex"]).id, "codex");
   assert.equal(parseBridgeClient(["--client=cursor"]).id, "cursor");
-  assert.throws(() => parseBridgeClient([]), /--client cursor\|codex/);
-  assert.throws(() => parseBridgeClient(["--client", "unknown"]), /--client cursor\|codex/);
+  assert.equal(parseBridgeClient(["--client", "vscode"]).id, "vscode");
+  assert.equal(parseBridgeClient(["--client=intellij"]).id, "intellij");
+  assert.throws(() => parseBridgeClient([]), /--client cursor\|vscode\|intellij\|codex\|claude/);
+  assert.throws(() => parseBridgeClient(["--client", "unknown"]), /--client cursor\|vscode\|intellij\|codex\|claude/);
 });

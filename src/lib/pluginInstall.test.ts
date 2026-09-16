@@ -99,6 +99,14 @@ test("buildMcpServerEntry uses absolute node for Cursor even when online", () =>
   assert.deepEqual(claudeOnline.args, ["-y", MCP_PACKAGE_PIN, "--client", "claude"]);
   assert.equal(claudeOnline.env?.YAAIF_OIDC_AUTHORITY, "${user_config.YAAIF_OIDC_AUTHORITY}");
 
+  const vscodeOnline = buildMcpServerEntry({ client: "vscode", offline: false });
+  assert.equal(vscodeOnline.command, "npx");
+  assert.deepEqual(vscodeOnline.args, ["-y", MCP_PACKAGE_PIN, "--client", "vscode"]);
+
+  const intellijOnline = buildMcpServerEntry({ client: "intellij", offline: false });
+  assert.equal(intellijOnline.command, "npx");
+  assert.deepEqual(intellijOnline.args, ["-y", MCP_PACKAGE_PIN, "--client", "intellij"]);
+
   const offline = buildMcpServerEntry({
     client: "codex",
     offline: true,
@@ -124,6 +132,8 @@ test("resolveMcpJsonPath prefers Codex nested plugin", async () => {
     await mkdir(join(home, "plugins", "yaaif-platform"), { recursive: true });
     await writeFile(join(home, "plugins", "yaaif-platform", ".mcp.json"), "{}\n");
     assert.equal(resolveMcpJsonPath("codex", home), join(home, "plugins", "yaaif-platform", ".mcp.json"));
+    assert.equal(resolveMcpJsonPath("vscode", home), join(home, ".mcp.json"));
+    assert.equal(resolveMcpJsonPath("intellij", home), join(home, ".mcp.json"));
     assert.equal(resolveMcpJsonPath("claude", home), join(home, ".mcp.json"));
     assert.equal(resolveMcpJsonPath("cursor", home), join(home, "mcp.json"));
   } finally {
