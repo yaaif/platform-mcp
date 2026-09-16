@@ -9,6 +9,22 @@ const CLIENTS = {
         stateHomeSuffix: "cursor",
         updatedBy: "yaaif-cursor",
     },
+    vscode: {
+        id: "vscode",
+        label: "VS Code",
+        oidcClientId: "yaaif-vscode",
+        stateHomeEnv: "YAAIF_VSCODE_HOME",
+        stateHomeSuffix: "vscode",
+        updatedBy: "yaaif-vscode",
+    },
+    intellij: {
+        id: "intellij",
+        label: "IntelliJ IDEA",
+        oidcClientId: "yaaif-intellij",
+        stateHomeEnv: "YAAIF_INTELLIJ_HOME",
+        stateHomeSuffix: "intellij",
+        updatedBy: "yaaif-intellij",
+    },
     codex: {
         id: "codex",
         label: "Codex",
@@ -39,8 +55,9 @@ export function parseBridgeClient(argv = process.argv.slice(2)) {
         return [];
     })
         .filter(Boolean);
-    if (values.length !== 1 || (values[0] !== "cursor" && values[0] !== "codex" && values[0] !== "claude")) {
-        throw new Error("a single --client cursor|codex|claude argument is required");
+    if (values.length !== 1 ||
+        !["cursor", "vscode", "intellij", "codex", "claude"].includes(values[0])) {
+        throw new Error("a single --client cursor|vscode|intellij|codex|claude argument is required");
     }
     return CLIENTS[values[0]];
 }

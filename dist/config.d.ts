@@ -1,7 +1,7 @@
-export type BridgeClient = "cursor" | "codex" | "claude";
+export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude";
 export type ClientDescriptor = {
     id: BridgeClient;
-    label: "Cursor" | "Codex" | "Claude Code";
+    label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code";
     oidcClientId: string;
     stateHomeEnv: string;
     stateHomeSuffix: string;

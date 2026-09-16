@@ -371,6 +371,18 @@ export function nextSteps(opts) {
             "Start a new Claude Code session, then /yaaif-platform:yaaif-login and /yaaif-platform:yaaif-doctor.",
         ].join("\n");
     }
+    if (opts.client === "vscode") {
+        return [
+            "Install the YAAIF for VS Code extension, then run YAAIF: Configure MCP Bridge.",
+            "Open Copilot Chat and run the YAAIF login and doctor commands.",
+        ].join("\n");
+    }
+    if (opts.client === "intellij") {
+        return [
+            "Install the YAAIF for IntelliJ plugin, then run YAAIF: Configure MCP Bridge.",
+            "Open JetBrains AI Assistant and run the YAAIF login and doctor commands.",
+        ].join("\n");
+    }
     const dir = opts.pluginSrc;
     return [
         dir
@@ -408,7 +420,7 @@ export async function executeInstall(options, setup = { argv: [] }) {
     if (client === "cursor" && pluginSrc) {
         assertCursorPluginSrc(pluginSrc);
     }
-    if (pluginSrc && (client === "claude" || client === "codex")) {
+    if (pluginSrc && (client === "vscode" || client === "intellij" || client === "claude" || client === "codex")) {
         assertMcpPluginSrc(client, pluginSrc);
     }
     const useAbsolute = offline || client === "cursor";
@@ -443,7 +455,7 @@ export async function executeInstall(options, setup = { argv: [] }) {
         }
         mcpJsonPath = join(pluginDest, "mcp.json");
     }
-    else if (pluginSrc && (client === "claude" || client === "codex")) {
+    else if (pluginSrc && (client === "vscode" || client === "intellij" || client === "claude" || client === "codex")) {
         mcpJsonPath = resolveMcpJsonPath(client, pluginSrc);
         await writeMcpJson(mcpJsonPath, launch);
     }
