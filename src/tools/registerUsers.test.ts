@@ -8,6 +8,48 @@ type RegisteredTool = {
   handler: (args: Record<string, unknown>) => Promise<{ isError?: boolean; content?: Array<{ text?: string }>; structuredContent?: Record<string, unknown> }>;
 };
 
+test("yaaif_user_create posts to /api/users", async () => {
+  const tools = new Map<string, RegisteredTool>();
+  const server = {
+    registerTool(name: string, _definition: unknown, handler: RegisteredTool["handler"]) {
+      tools.set(name, { handler });
+    },
+  } as unknown as McpServer;
+  const ctx = {
+    api: {
+      apiJSON: async (method: string, path: string, body?: unknown) => {
+        if (method === "POST" && path === "/api/users") {
+          assert.deepEqual(body, {
+            name: "Ada Lovelace",
+            email: "ada@example.com",
+            role: "VIEWER",
+            active: true,
+          });
+          return {
+            id: "u1",
+            name: "Ada Lovelace",
+            email: "ada@example.com",
+            role: "VIEWER",
+            active: true,
+            temporary_password: "TempPass!234",
+            password_must_reset: true,
+            identity_provider: "keycloak",
+          };
+        }
+        throw new Error(`unexpected ${method} ${path}`);
+      },
+    },
+  } as unknown as Ctx;
+  registerUserTools(server, ctx);
+
+  const create = tools.get("yaaif_user_create");
+  assert.ok(create);
+  const result = await create.handler({ name: "Ada Lovelace", email: "ada@example.com" });
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.user?.email, "ada@example.com");
+  assert.equal(result.structuredContent?.temporary_password, "TempPass!234");
+});
+
 test("yaaif_user_role_set requires confirm_admin_grant for ADMIN", async () => {
   const tools = new Map<string, RegisteredTool>();
   const server = {
