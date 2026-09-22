@@ -144,7 +144,7 @@ async function fetchTelemetry(
   }
 }
 
-/** Strictly read-only operations support tools (no pause/stop/approve/retry). */
+/** Operations support tools: read-only analyze/telemetry + confirmed diagnosis write-back. */
 export function registerOpsSupportTools(server: McpServer, ctx: Ctx): void {
   server.registerTool("yaaif_ops_correlate", {
     description:
@@ -361,6 +361,151 @@ export function registerOpsSupportTools(server: McpServer, ctx: Ctx): void {
       });
       return shapedOk("Fetched ops session insights.", result, args);
     } catch (e) {
+      return fail(String(e));
+    }
+  });
+
+  const diagnosisFailureSchema = z.object({
+    source: z.string().optional(),
+    severity: z.string().optional(),
+    code: z.string().optional(),
+    title: z.string().optional(),
+    summary: z.string().optional(),
+    causes: z.array(z.string()).optional(),
+    resolutions: z.array(z.string()).optional(),
+  });
+
+  server.registerTool("yaaif_ops_diagnosis_list", {
+    description:
+      "READ-ONLY: list prior confirmed ops diagnoses (newest first). Provide exactly one of ambient_run_id, session_id, or desktop_run_id. Call before yaaif_ops_analyze so prior findings inform triage.",
+    inputSchema: {
+      ambient_run_id: z.string().optional(),
+      session_id: z.string().optional(),
+      desktop_run_id: z.string().optional(),
+      limit: z.number().int().positive().optional(),
+      ...shapeOptsSchema,
+    },
+  }, async (args) => {
+    try {
+      const path = `/api/ops/diagnoses${opsQuery({
+        ambient_run_id: args.ambient_run_id,
+        session_id: args.session_id,
+        desktop_run_id: args.desktop_run_id,
+        limit: args.limit != null ? String(args.limit) : undefined,
+      })}`;
+      const result = await ctx.api.agentJSON("GET", path);
+      return shapedOk("Listed prior ops diagnoses.", result, args);
+    } catch (e) {
+      return fail(String(e));
+    }
+  });
+
+  server.registerTool("yaaif_ops_diagnosis_get", {
+    description: "READ-ONLY: fetch one confirmed ops diagnosis by id.",
+    inputSchema: {
+      id: z.string(),
+      ...shapeOptsSchema,
+    },
+  }, async (args) => {
+    try {
+      const result = await ctx.api.agentJSON(
+        "GET",
+        `/api/ops/diagnoses/${encodeURIComponent(args.id)}`,
+      );
+      return shapedOk("Fetched ops diagnosis.", result, args);
+    } catch (e) {
+      return fail(String(e));
+    }
+  });
+
+  server.registerTool("yaaif_ops_diagnosis_create", {
+    description:
+      "Write a confirmed OpsDiagnosisRecord back to YAAIF (append-only). Requires confirm=true after presenting the full draft to the user. Does not pause/stop/approve/retry runs. Requires ops.support.write.",
+    inputSchema: {
+      confirm: z.boolean().describe("Must be true after explicit user confirmation"),
+      ambient_run_id: z.string(),
+      session_id: z.string().optional(),
+      desktop_run_id: z.string().optional(),
+      harness_run_id: z.string().optional(),
+      request_ids: z.array(z.string()).optional(),
+      intent: z.enum(["diagnose_failure", "inspect_run"]),
+      severity: z.enum(["error", "warning", "info", "ok"]),
+      title: z.string(),
+      summary: z.string(),
+      status_session: z.string().optional(),
+      status_ambient: z.string().optional(),
+      status_desktop: z.string().optional(),
+      status_harness: z.string().optional(),
+      failures: z.array(diagnosisFailureSchema),
+      next_steps: z.array(z.string()),
+      coverage_reached: z.number().int().optional(),
+      coverage_total: z.number().int().optional(),
+      path_executed: z.number().int().optional(),
+      path_reached: z.number().int().optional(),
+      current_step_id: z.string().optional(),
+      current_step_status: z.string().optional(),
+      canvas_url: z.string().optional(),
+      diagnostics_version: z.string(),
+      evidence_analyze: z.boolean(),
+      evidence_telemetry: z.array(z.string()).optional(),
+      partial_errors: z.record(z.string(), z.string()).optional(),
+      source: z.enum(["cursor", "vscode", "intellij", "codex", "claude-code", "admin_ui"]),
+      ide_client: z.string().optional(),
+      diagnosed_at: z.string().optional().describe("RFC3339 timestamp; server may normalize"),
+    },
+  }, async (args) => {
+    if (!args.confirm) {
+      return fail(
+        "Set confirm=true only after presenting the full OpsDiagnosisRecord draft to the user and receiving explicit confirmation to write it back to YAAIF.",
+      );
+    }
+    try {
+      const body: Record<string, unknown> = {
+        ambient_run_id: args.ambient_run_id,
+        session_id: args.session_id,
+        desktop_run_id: args.desktop_run_id,
+        harness_run_id: args.harness_run_id,
+        request_ids: args.request_ids ?? [],
+        intent: args.intent,
+        severity: args.severity,
+        title: args.title,
+        summary: args.summary,
+        status_session: args.status_session ?? "",
+        status_ambient: args.status_ambient ?? "",
+        status_desktop: args.status_desktop ?? "",
+        status_harness: args.status_harness ?? "",
+        failures: (args.failures ?? []).map((failure) => ({
+          source: failure.source ?? "",
+          severity: failure.severity ?? "",
+          code: failure.code ?? "",
+          title: failure.title ?? "",
+          summary: failure.summary ?? "",
+          causes: failure.causes ?? [],
+          resolutions: failure.resolutions ?? [],
+        })),
+        next_steps: args.next_steps ?? [],
+        coverage_reached: args.coverage_reached ?? 0,
+        coverage_total: args.coverage_total ?? 0,
+        path_executed: args.path_executed ?? 0,
+        path_reached: args.path_reached ?? 0,
+        current_step_id: args.current_step_id ?? "",
+        current_step_status: args.current_step_status ?? "",
+        canvas_url: args.canvas_url ?? "",
+        diagnostics_version: args.diagnostics_version,
+        evidence_analyze: args.evidence_analyze,
+        evidence_telemetry: args.evidence_telemetry ?? [],
+        partial_errors: args.partial_errors ?? {},
+        source: args.source,
+        ide_client: args.ide_client ?? "",
+      };
+      if (args.diagnosed_at?.trim()) {
+        body.diagnosed_at = args.diagnosed_at.trim();
+      }
+      const result = await ctx.api.agentJSON("POST", "/api/ops/diagnoses", body);
+      void ctx.telemetry.increment("ops_diagnosis_create_ok");
+      return ok("Persisted ops diagnosis to YAAIF.", { diagnosis: result });
+    } catch (e) {
+      void ctx.telemetry.increment("ops_diagnosis_create_fail");
       return fail(String(e));
     }
   });

@@ -1,6 +1,16 @@
 import type { AuthClient } from "../auth/oidc.js";
 import type { Config } from "../config.js";
+import { encodeMultipart } from "../lib/toolPackageInspect.js";
 import { yaaifFetch } from "./tls.js";
+
+export type ApiRequestOpts = { timeoutMs?: number };
+
+export type ApiFormFile = {
+  field?: string;
+  filename: string;
+  body: Buffer;
+  contentType?: string;
+};
 
 function isTenantBootstrapPath(path: string): boolean {
   return (
@@ -17,34 +27,34 @@ export class ApiClient {
     private readonly auth: AuthClient,
   ) {}
 
-  agentJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-    return this.doJSON<T>(this.cfg.agentBaseUrl, method, path, body);
+  agentJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+    return this.doJSON<T>(this.cfg.agentBaseUrl, method, path, body, opts);
   }
 
-  apiJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-    return this.doJSON<T>(this.cfg.apiBaseUrl, method, path, body);
+  apiJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+    return this.doJSON<T>(this.cfg.apiBaseUrl, method, path, body, opts);
   }
 
-  controlPlaneJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-    return this.doJSON<T>(this.cfg.controlPlaneBaseUrl, method, path, body);
+  controlPlaneJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+    return this.doJSON<T>(this.cfg.controlPlaneBaseUrl, method, path, body, opts);
   }
 
-  approvalJSON<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-    return this.doJSON<T>(this.cfg.approvalBaseUrl, method, path, body);
+  approvalJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+    return this.doJSON<T>(this.cfg.approvalBaseUrl, method, path, body, opts);
   }
 
-  private async doJSON<T>(base: string, method: string, path: string, body?: unknown): Promise<T> {
-    let token: string;
-    let session: Awaited<ReturnType<AuthClient["accessToken"]>>["session"];
-    try {
-      ({ token, session } = await this.auth.accessToken());
-    } catch (e) {
-      const msg = String(e);
-      if (msg.includes("reauth_required") || msg.includes("issuer_mismatch") || msg.includes("not authenticated")) {
-        throw e;
-      }
-      throw e;
-    }
+  apiForm<T = unknown>(
+    method: string,
+    path: string,
+    fields: Record<string, string>,
+    file: ApiFormFile,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
+    return this.doForm<T>(this.cfg.apiBaseUrl, method, path, fields, file, opts);
+  }
+
+  private async authHeaders(path: string): Promise<Record<string, string>> {
+    const { token, session } = await this.auth.accessToken();
     const tenantId = (session.tenant_id || this.cfg.defaultTenantId || "").trim();
     if (!tenantId && !isTenantBootstrapPath(path)) {
       throw new Error("tenant not set; call yaaif_set_tenant (name/slug/uuid) or yaaif_ensure_session");
@@ -54,16 +64,55 @@ export class ApiClient {
       Accept: "application/json",
     };
     if (tenantId) headers["X-Tenant-ID"] = tenantId;
+    return headers;
+  }
+
+  private async doJSON<T>(
+    base: string,
+    method: string,
+    path: string,
+    body?: unknown,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
+    const headers = await this.authHeaders(path);
     let payload: string | undefined;
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
       payload = JSON.stringify(body);
     }
-    const res = await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+    return this.parseJSON<T>(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
       method,
       headers,
       body: payload,
+      timeoutMs: opts?.timeoutMs,
+    }));
+  }
+
+  private async doForm<T>(
+    base: string,
+    method: string,
+    path: string,
+    fields: Record<string, string>,
+    file: ApiFormFile,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
+    const headers = await this.authHeaders(path);
+    const encoded = encodeMultipart(fields, {
+      field: file.field || "file",
+      filename: file.filename,
+      body: file.body,
+      contentType: file.contentType,
     });
+    headers["Content-Type"] = encoded.contentType;
+    return this.parseJSON<T>(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+      method,
+      headers,
+      body: encoded.buffer,
+      timeoutMs: opts?.timeoutMs ?? 5 * 60 * 1000,
+    }));
+  }
+
+  private async parseJSON<T>(method: string, path: string, res: Response): Promise<T> {
     const text = await res.text();
     if (!res.ok) {
       throw new Error(`${method} ${path} failed (${res.status}): ${text.trim()}`);

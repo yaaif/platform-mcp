@@ -71,6 +71,45 @@ export function registerUserTools(server, ctx) {
             return fail(String(e));
         }
     });
+    server.registerTool("yaaif_user_create", {
+        description: "Create a Keycloak email/password user, generate a one-time password that must be reset on first login, then save the YAAIF tenant user. Returns temporary_password once. Requires users:write. Granting ADMIN additionally requires the caller to be ADMIN and confirm_admin_grant=true. Downstream systems can call the same POST /api/users contract with a ymp- key scoped to users:write.",
+        inputSchema: {
+            name: z.string(),
+            email: z.string(),
+            role: z.string().optional(),
+            active: z.boolean().optional(),
+            confirm_admin_grant: z.boolean().optional(),
+        },
+    }, async ({ name, email, role, active, confirm_admin_grant }) => {
+        const displayName = name.trim();
+        const normalizedEmail = email.trim().toLowerCase();
+        const targetRole = normalizeRole(role ?? "VIEWER") || "VIEWER";
+        if (!displayName) {
+            return fail("name is required");
+        }
+        if (!normalizedEmail) {
+            return fail("email is required");
+        }
+        if (targetRole === "ADMIN" && !confirm_admin_grant) {
+            return fail("Granting ADMIN requires confirm_admin_grant=true (caller must already be ADMIN).");
+        }
+        try {
+            const user = await ctx.api.apiJSON("POST", "/api/users", {
+                name: displayName,
+                email: normalizedEmail,
+                role: targetRole,
+                active: active ?? true,
+            });
+            return ok(`Created ${user.email ?? normalizedEmail}. Share temporary_password once; Keycloak requires a reset on first login.`, {
+                user,
+                temporary_password: user.temporary_password,
+                password_must_reset: user.password_must_reset ?? true,
+            });
+        }
+        catch (e) {
+            return fail(String(e));
+        }
+    });
     server.registerTool("yaaif_user_role_set", {
         description: "Change a tenant user's platform role (ADMIN, EDITOR, DEVELOPER, VIEWER, CHAT_USER, or a custom role from yaaif_roles_list). Requires users:write. Granting ADMIN additionally requires the caller to be ADMIN and confirm_admin_grant=true.",
         inputSchema: {

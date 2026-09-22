@@ -25,7 +25,7 @@ test("all editor descriptors register the same YAAIF MCP tool contract", () => {
   const claude = registeredNames("claude");
 
   assert.equal(new Set(cursor).size, cursor.length);
-  assert.ok(cursor.length >= 169);
+  assert.ok(cursor.length >= 179);
   assert.deepEqual(vscode, cursor);
   assert.deepEqual(intellij, cursor);
   assert.deepEqual(codex, cursor);

@@ -212,8 +212,13 @@ export function getTlsResolveInfo(): TlsResolveInfo {
   return resolveInfo;
 }
 
+export type YaaifFetchInit = Omit<RequestInit, "body"> & {
+  timeoutMs?: number;
+  body?: RequestInit["body"] | Buffer;
+};
+
 /** fetch()-compatible helper that applies optional extra CA / client mTLS. */
-export async function yaaifFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+export async function yaaifFetch(input: string | URL, init: YaaifFetchInit = {}): Promise<Response> {
   const url = typeof input === "string" ? new URL(input) : input;
   const isHttps = url.protocol === "https:";
   const headers = new Headers(init.headers);
@@ -223,6 +228,9 @@ export async function yaaifFetch(input: string | URL, init: RequestInit = {}): P
     body = typeof init.body === "string" || Buffer.isBuffer(init.body)
       ? init.body as string | Buffer
       : String(init.body);
+  }
+  if (Buffer.isBuffer(body) && !headers.has("Content-Length")) {
+    headers.set("Content-Length", String(body.length));
   }
 
   const tlsOpts = getTlsMaterial();
@@ -260,7 +268,7 @@ export async function yaaifFetch(input: string | URL, init: RequestInit = {}): P
       },
     );
     req.on("error", reject);
-    req.setTimeout(30_000, () => {
+    req.setTimeout(init.timeoutMs ?? 30_000, () => {
       req.destroy(new Error(`request timed out: ${url.toString()}`));
     });
     if (init.signal) {
