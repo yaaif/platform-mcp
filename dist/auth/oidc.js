@@ -175,13 +175,18 @@ export class AuthClient {
     /**
      * OAuth 2.0 device authorization grant (headless / CI).
      * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
+     * Clients with pkce.code.challenge.method=S256 also require PKCE on device start + token poll.
      */
     async deviceLogin(opts = {}) {
         await this.store.ensureHome(this.cfg.stateHome);
+        const verifier = b64url(randomBytes(32));
+        const challenge = b64url(createHash("sha256").update(verifier).digest());
         const deviceEndpoint = `${this.cfg.oidcAuthority}/protocol/openid-connect/auth/device`;
         const startBody = new URLSearchParams({
             client_id: this.cfg.oidcClientId,
             scope: this.cfg.oidcScopes.join(" "),
+            code_challenge: challenge,
+            code_challenge_method: "S256",
         });
         const startRes = await yaaifFetch(deviceEndpoint, {
             method: "POST",
@@ -191,7 +196,7 @@ export class AuthClient {
         const startRaw = (await startRes.json());
         if (!startRes.ok) {
             throw new Error(`device auth start failed (${startRes.status}): ${JSON.stringify(startRaw)}. ` +
-                `Enable oauth2.device.authorization.grant.enabled on the ${this.cfg.oidcClientId} Keycloak client.`);
+                `Enable oauth2.device.authorization.grant.enabled (and PKCE S256 if required) on the ${this.cfg.oidcClientId} Keycloak client.`);
         }
         const deviceCode = String(startRaw.device_code ?? "");
         const userCode = String(startRaw.user_code ?? "");
@@ -210,6 +215,7 @@ export class AuthClient {
                 grant_type: "urn:ietf:params:oauth:grant-type:device_code",
                 device_code: deviceCode,
                 client_id: this.cfg.oidcClientId,
+                code_verifier: verifier,
             });
             const tokenRes = await yaaifFetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
                 method: "POST",

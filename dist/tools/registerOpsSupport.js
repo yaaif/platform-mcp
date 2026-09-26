@@ -322,9 +322,11 @@ export function registerOpsSupportTools(server, ctx) {
         resolutions: z.array(z.string()).optional(),
     });
     server.registerTool("yaaif_ops_diagnosis_list", {
-        description: "READ-ONLY: list prior confirmed ops diagnoses for an ambient_run_id (newest first). Call before yaaif_ops_analyze so prior findings inform triage.",
+        description: "READ-ONLY: list prior confirmed ops diagnoses (newest first). Provide exactly one of ambient_run_id, session_id, or desktop_run_id. Call before yaaif_ops_analyze so prior findings inform triage.",
         inputSchema: {
-            ambient_run_id: z.string(),
+            ambient_run_id: z.string().optional(),
+            session_id: z.string().optional(),
+            desktop_run_id: z.string().optional(),
             limit: z.number().int().positive().optional(),
             ...shapeOptsSchema,
         },
@@ -332,6 +334,8 @@ export function registerOpsSupportTools(server, ctx) {
         try {
             const path = `/api/ops/diagnoses${opsQuery({
                 ambient_run_id: args.ambient_run_id,
+                session_id: args.session_id,
+                desktop_run_id: args.desktop_run_id,
                 limit: args.limit != null ? String(args.limit) : undefined,
             })}`;
             const result = await ctx.api.agentJSON("GET", path);

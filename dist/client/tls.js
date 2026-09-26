@@ -195,6 +195,9 @@ export async function yaaifFetch(input, init = {}) {
             ? init.body
             : String(init.body);
     }
+    if (Buffer.isBuffer(body) && !headers.has("Content-Length")) {
+        headers.set("Content-Length", String(body.length));
+    }
     const tlsOpts = getTlsMaterial();
     const agent = isHttps
         ? new https.Agent({
@@ -227,7 +230,7 @@ export async function yaaifFetch(input, init = {}) {
             });
         });
         req.on("error", reject);
-        req.setTimeout(30_000, () => {
+        req.setTimeout(init.timeoutMs ?? 30_000, () => {
             req.destroy(new Error(`request timed out: ${url.toString()}`));
         });
         if (init.signal) {

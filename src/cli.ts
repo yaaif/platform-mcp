@@ -50,6 +50,12 @@ async function main(): Promise<void> {
   });
   registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
 
+  // A floating device-login poll must not terminate the stdio server. Node treats
+  // an unhandled rejection as fatal, and OpenCode then drops every YAAIF tool.
+  process.on("unhandledRejection", (err) => {
+    console.error("unhandled rejection", err);
+  });
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

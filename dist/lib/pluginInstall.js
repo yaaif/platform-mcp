@@ -383,6 +383,11 @@ export function nextSteps(opts) {
             "Open JetBrains AI Assistant and run the YAAIF login and doctor commands.",
         ].join("\n");
     }
+    if (opts.client === "opencode") {
+        return [
+            "OpenCode is served with the YAAIF installation. Each user signs in with yaaif_login in their own workspace.",
+        ].join("\n");
+    }
     const dir = opts.pluginSrc;
     return [
         dir

@@ -5,6 +5,7 @@ import { mergeSkillIds } from "../lib/mergeSkillIds.js";
 import { ENGINE_SPINE_ONLY_WARNING, isEngineSpineOnlyGraph } from "../lib/workflowGraph.js";
 import { registerAuthTools } from "./registerAuth.js";
 import { registerDesktopTools } from "./registerDesktop.js";
+import { registerDesktopPackageTools } from "./registerDesktopPackages.js";
 import { registerApprovalTools } from "./registerApproval.js";
 import { registerPlanTools } from "./registerPlan.js";
 import { registerSpecTools } from "./registerSpecs.js";
@@ -29,6 +30,7 @@ export function registerAllTools(server, ctx) {
     registerApiKeyTools(server, ctx);
     registerUserTools(server, ctx);
     registerDesktopTools(server, ctx);
+    registerDesktopPackageTools(server, ctx);
     registerApprovalTools(server, ctx);
     registerPlanTools(server, ctx);
     registerSpecTools(server, ctx);
@@ -820,7 +822,7 @@ function registerMcp(server, ctx) {
         }
     });
     server.registerTool("yaaif_catalog_overview", {
-        description: "Read-only snapshot of the current tenant: agents, skills, MCP tools/servers/deployments, API keys, deployment settings status, ambient agents/workflows, local tools, file registry lifecycle (paginated summaries).",
+        description: "Read-only snapshot of the current tenant: agents, skills, MCP tools/servers/deployments, desktop tool packages, API keys, deployment settings status, ambient agents/workflows, local tools, file registry lifecycle (paginated summaries).",
         inputSchema: {
             q: z.string().optional(),
             limit: z.number().optional(),
@@ -847,6 +849,7 @@ function registerMcp(server, ctx) {
             load("mcp_tools", () => ctx.api.agentJSON("GET", `/api/mcp-tools${qs}`)),
             load("mcp_servers", () => ctx.api.agentJSON("GET", `/api/mcp-tools/servers${qs}`)),
             load("mcp_deployments", () => ctx.api.apiJSON("GET", `/api/mcp-deployments${qs}`)),
+            load("desktop_tool_packages", () => ctx.api.apiJSON("GET", `/api/desktop/tool-packages${qs}`)),
             load("api_keys", () => ctx.api.apiJSON("GET", "/api/mcp-platform-keys")),
             load("deployment_settings_status", () => ctx.api.apiJSON("GET", "/api/deployment-settings/status")),
             load("ambient_agents", () => ctx.api.agentJSON("GET", `/api/ambient/agents${qs}`)),

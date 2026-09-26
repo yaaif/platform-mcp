@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clientDescriptor, loadConfig, parseBridgeClient } from "./config.js";
+import { clientDescriptor, loadConfig, opencodeStateHome, opencodeWorkspaceSubject, parseBridgeClient } from "./config.js";
 
 test("loadConfig reads env defaults", () => {
   process.env.YAAIF_OIDC_AUTHORITY = "https://example.com/auth/realms/yaaif";
@@ -71,6 +71,30 @@ test("parseBridgeClient requires exactly one supported client", () => {
   assert.equal(parseBridgeClient(["--client=cursor"]).id, "cursor");
   assert.equal(parseBridgeClient(["--client", "vscode"]).id, "vscode");
   assert.equal(parseBridgeClient(["--client=intellij"]).id, "intellij");
-  assert.throws(() => parseBridgeClient([]), /--client cursor\|vscode\|intellij\|codex\|claude/);
-  assert.throws(() => parseBridgeClient(["--client", "unknown"]), /--client cursor\|vscode\|intellij\|codex\|claude/);
+  assert.equal(parseBridgeClient(["--client", "opencode"]).id, "opencode");
+  assert.throws(() => parseBridgeClient([]), /--client cursor\|vscode\|intellij\|codex\|claude\|opencode/);
+  assert.throws(() => parseBridgeClient(["--client", "unknown"]), /--client cursor\|vscode\|intellij\|codex\|claude\|opencode/);
+});
+
+test("OpenCode state home follows the user workspace", () => {
+  delete process.env.YAAIF_OIDC_CLIENT_ID;
+  delete process.env.YAAIF_OPENCODE_HOME;
+  assert.equal(opencodeWorkspaceSubject("/projects/users/user-1"), "user-1");
+  process.env.YAAIF_OPENCODE_WORKSPACE_ROOT = "/tmp/opencode/users";
+  process.env.YAAIF_OPENCODE_STATE_ROOT = "/tmp/opencode/state";
+  assert.equal(opencodeWorkspaceSubject("/tmp/opencode/users/user-2/src"), "user-2");
+  assert.equal(opencodeStateHome("user-2"), "/tmp/opencode/state/user-2");
+  delete process.env.YAAIF_OPENCODE_WORKSPACE_ROOT;
+  delete process.env.YAAIF_OPENCODE_STATE_ROOT;
+  assert.equal(opencodeWorkspaceSubject("/projects/users/user-1/src"), "user-1");
+  assert.equal(opencodeWorkspaceSubject("/projects/users/../etc"), undefined);
+  assert.equal(opencodeStateHome("user-1"), "/var/lib/opencode/yaaif/user-1");
+
+  const cfg = loadConfig(clientDescriptor("opencode"));
+  assert.equal(cfg.oidcClientId, "yaaif-opencode");
+  assert.equal(cfg.client.updatedBy, "yaaif-opencode");
+  process.env.YAAIF_OPENCODE_HOME = "/var/lib/opencode/yaaif/user-1";
+  const scoped = loadConfig(clientDescriptor("opencode"));
+  assert.equal(scoped.stateHome, "/var/lib/opencode/yaaif/user-1");
+  delete process.env.YAAIF_OPENCODE_HOME;
 });

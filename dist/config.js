@@ -1,5 +1,27 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+function opencodeWorkspaceRoot() {
+    const fromEnv = (process.env.YAAIF_OPENCODE_WORKSPACE_ROOT ?? "").trim();
+    return (fromEnv || "/projects/users").replace(/\/+$/, "");
+}
+function opencodeStateRoot() {
+    const fromEnv = (process.env.YAAIF_OPENCODE_STATE_ROOT ?? "").trim();
+    return (fromEnv || "/var/lib/opencode/yaaif").replace(/\/+$/, "");
+}
+/** Per-user OpenCode workspace: <root>/<subject>/... Default root is /projects/users. */
+export function opencodeWorkspaceSubject(cwd) {
+    const root = opencodeWorkspaceRoot();
+    if (cwd !== root && !cwd.startsWith(`${root}/`))
+        return undefined;
+    const rest = cwd.slice(root.length).replace(/^\/+/, "");
+    const subject = rest.split("/")[0]?.trim() ?? "";
+    if (!subject || subject === "." || subject === ".." || subject.includes(".."))
+        return undefined;
+    return subject;
+}
+export function opencodeStateHome(subject) {
+    return join(opencodeStateRoot(), subject);
+}
 const CLIENTS = {
     cursor: {
         id: "cursor",
@@ -41,6 +63,14 @@ const CLIENTS = {
         stateHomeSuffix: "claude",
         updatedBy: "yaaif-claude",
     },
+    opencode: {
+        id: "opencode",
+        label: "OpenCode",
+        oidcClientId: "yaaif-opencode",
+        stateHomeEnv: "YAAIF_OPENCODE_HOME",
+        stateHomeSuffix: "opencode",
+        updatedBy: "yaaif-opencode",
+    },
 };
 export function clientDescriptor(client) {
     return CLIENTS[client];
@@ -56,8 +86,8 @@ export function parseBridgeClient(argv = process.argv.slice(2)) {
     })
         .filter(Boolean);
     if (values.length !== 1 ||
-        !["cursor", "vscode", "intellij", "codex", "claude"].includes(values[0])) {
-        throw new Error("a single --client cursor|vscode|intellij|codex|claude argument is required");
+        !["cursor", "vscode", "intellij", "codex", "claude", "opencode"].includes(values[0])) {
+        throw new Error("a single --client cursor|vscode|intellij|codex|claude|opencode argument is required");
     }
     return CLIENTS[values[0]];
 }
@@ -70,6 +100,17 @@ function env(name, fallback = "") {
     if (!v || /^\$\{[A-Z0-9_]+\}$/.test(v))
         return fallback;
     return v;
+}
+function resolveStateHome(client, cwd = process.cwd()) {
+    const fromEnv = env(client.stateHomeEnv);
+    if (fromEnv)
+        return fromEnv;
+    if (client.id === "opencode") {
+        const subject = opencodeWorkspaceSubject(cwd);
+        if (subject)
+            return opencodeStateHome(subject);
+    }
+    return join(homedir(), ".yaaif", client.stateHomeSuffix);
 }
 export function loadConfig(client = clientDescriptor("cursor")) {
     const scopes = env("YAAIF_OIDC_SCOPES", "openid profile email offline_access")
@@ -86,7 +127,7 @@ export function loadConfig(client = clientDescriptor("cursor")) {
         controlPlaneBaseUrl: trimSlash(env("YAAIF_CONTROL_PLANE_BASE_URL", `${apiBaseUrl}/control-plane-service`)),
         approvalBaseUrl: trimSlash(env("YAAIF_APPROVAL_BASE_URL", `${apiBaseUrl}/approval-service`)),
         defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
-        stateHome: env(client.stateHomeEnv, join(homedir(), ".yaaif", client.stateHomeSuffix)),
+        stateHome: resolveStateHome(client),
         activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),
         extraCaFile: env("YAAIF_EXTRA_CA_FILE", env("NODE_EXTRA_CA_CERTS")),
         clientCertFile: env("YAAIF_CLIENT_CERT_FILE"),

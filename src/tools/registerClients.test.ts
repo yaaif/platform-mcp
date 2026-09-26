@@ -5,7 +5,7 @@ import { clientDescriptor } from "../config.js";
 import type { Ctx } from "./ctx.js";
 import { registerAllTools } from "./register.js";
 
-function registeredNames(client: "cursor" | "vscode" | "intellij" | "codex" | "claude"): string[] {
+function registeredNames(client: "cursor" | "vscode" | "intellij" | "codex" | "claude" | "opencode"): string[] {
   const names: string[] = [];
   const server = {
     registerTool(name: string) {
@@ -17,12 +17,13 @@ function registeredNames(client: "cursor" | "vscode" | "intellij" | "codex" | "c
   return names.sort();
 }
 
-test("all editor descriptors register the same YAAIF MCP tool contract", () => {
+test("editor descriptors share the full YAAIF MCP tool contract", () => {
   const cursor = registeredNames("cursor");
   const vscode = registeredNames("vscode");
   const intellij = registeredNames("intellij");
   const codex = registeredNames("codex");
   const claude = registeredNames("claude");
+  const opencode = registeredNames("opencode");
 
   assert.equal(new Set(cursor).size, cursor.length);
   assert.ok(cursor.length >= 179);
@@ -30,4 +31,5 @@ test("all editor descriptors register the same YAAIF MCP tool contract", () => {
   assert.deepEqual(intellij, cursor);
   assert.deepEqual(codex, cursor);
   assert.deepEqual(claude, cursor);
+  assert.deepEqual(opencode, cursor);
 });

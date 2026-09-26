@@ -66,7 +66,44 @@ function normalizeAuthority(v: string): string {
   return v.replace(/\/+$/, "").toLowerCase();
 }
 
+/** Make Keycloak device URLs openable in the user's browser (not host.docker.internal). */
+function browserFacingVerificationUri(
+  uri: string,
+  authority: string,
+  userCode: string,
+): string {
+  const auth = authority.replace(/\/+$/, "");
+  let raw = (uri || "").trim();
+  if (!raw) {
+    raw = userCode ? `${auth}/device?user_code=${encodeURIComponent(userCode)}` : `${auth}/device`;
+  }
+  try {
+    const u = new URL(raw);
+    if (u.hostname === "host.docker.internal" || u.hostname === "localhost") {
+      u.hostname = "127.0.0.1";
+    }
+    if (userCode && !u.searchParams.get("user_code")) {
+      u.searchParams.set("user_code", userCode);
+    }
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+type DevicePending = {
+  deviceCode: string;
+  verifier: string;
+  verificationUri: string;
+  userCode: string;
+  intervalSec: number;
+  deadline: number;
+  pollPromise: Promise<Session>;
+};
+
 export class AuthClient {
+  private devicePending: DevicePending | null = null;
+
   constructor(
     private readonly cfg: Config,
     private readonly store: SessionStore,
@@ -207,17 +244,34 @@ export class AuthClient {
   /**
    * OAuth 2.0 device authorization grant (headless / CI).
    * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
+   * Clients with pkce.code.challenge.method=S256 also require PKCE on device start + token poll.
+   *
+   * Default wait=false returns verification_uri/user_code immediately and polls in the
+   * background so MCP hosts (OpenCode/Cursor) do not hit tool timeouts before the agent
+   * can show the code. Pass wait=true for blocking CI flows.
    */
-  async deviceLogin(opts: { timeout_ms?: number } = {}): Promise<{
-    session: Session;
+  async deviceLogin(opts: { timeout_ms?: number; wait?: boolean } = {}): Promise<{
+    status: "complete" | "pending";
+    session?: Session;
     verification_uri: string;
     user_code: string;
   }> {
+    const wait = opts.wait === true;
+    const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
+
+    if (this.devicePending) {
+      return this.finishOrReportPending(wait);
+    }
+
     await this.store.ensureHome(this.cfg.stateHome);
+    const verifier = b64url(randomBytes(32));
+    const challenge = b64url(createHash("sha256").update(verifier).digest());
     const deviceEndpoint = `${this.cfg.oidcAuthority}/protocol/openid-connect/auth/device`;
     const startBody = new URLSearchParams({
       client_id: this.cfg.oidcClientId,
       scope: this.cfg.oidcScopes.join(" "),
+      code_challenge: challenge,
+      code_challenge_method: "S256",
     });
     const startRes = await yaaifFetch(deviceEndpoint, {
       method: "POST",
@@ -228,16 +282,17 @@ export class AuthClient {
     if (!startRes.ok) {
       throw new Error(
         `device auth start failed (${startRes.status}): ${JSON.stringify(startRaw)}. ` +
-          `Enable oauth2.device.authorization.grant.enabled on the ${this.cfg.oidcClientId} Keycloak client.`,
+          `Enable oauth2.device.authorization.grant.enabled (and PKCE S256 if required) on the ${this.cfg.oidcClientId} Keycloak client.`,
       );
     }
     const deviceCode = String(startRaw.device_code ?? "");
     const userCode = String(startRaw.user_code ?? "");
-    const verificationUri = String(
-      startRaw.verification_uri_complete ?? startRaw.verification_uri ?? "",
+    const verificationUri = browserFacingVerificationUri(
+      String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? ""),
+      this.cfg.oidcAuthority,
+      userCode,
     );
     const intervalSec = typeof startRaw.interval === "number" ? startRaw.interval : 5;
-    const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
     const deadline = Date.now() + timeoutMs;
 
     if (verificationUri) {
@@ -246,12 +301,95 @@ export class AuthClient {
       });
     }
 
+    const pending: DevicePending = {
+      deviceCode,
+      verifier,
+      verificationUri,
+      userCode,
+      intervalSec,
+      deadline,
+      pollPromise: this.pollDeviceTokens({
+        deviceCode,
+        verifier,
+        verificationUri,
+        userCode,
+        intervalSec,
+        deadline,
+      }).finally(() => {
+        if (this.devicePending === pending) this.devicePending = null;
+      }),
+    };
+    this.devicePending = pending;
+    // wait=false returns before the poll finishes. Attach a handler so a later
+    // rejection cannot crash the MCP process and drop the tool list.
+    void pending.pollPromise.catch((err: unknown) => {
+      console.error(`device login poll failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+
+    if (!wait) {
+      return {
+        status: "pending",
+        verification_uri: verificationUri,
+        user_code: userCode,
+      };
+    }
+    return this.finishOrReportPending(true);
+  }
+
+  private async finishOrReportPending(wait: boolean): Promise<{
+    status: "complete" | "pending";
+    session?: Session;
+    verification_uri: string;
+    user_code: string;
+  }> {
+    const pending = this.devicePending;
+    if (!pending) {
+      throw new Error("no device login in progress");
+    }
+    if (!wait) {
+      const settled = await Promise.race([
+        pending.pollPromise.then((session) => ({ done: true as const, session })),
+        new Promise<{ done: false }>((r) => setTimeout(() => r({ done: false }), 25)),
+      ]);
+      if (settled.done) {
+        return {
+          status: "complete",
+          session: settled.session,
+          verification_uri: pending.verificationUri,
+          user_code: pending.userCode,
+        };
+      }
+      return {
+        status: "pending",
+        verification_uri: pending.verificationUri,
+        user_code: pending.userCode,
+      };
+    }
+    const session = await pending.pollPromise;
+    return {
+      status: "complete",
+      session,
+      verification_uri: pending.verificationUri,
+      user_code: pending.userCode,
+    };
+  }
+
+  private async pollDeviceTokens(opts: {
+    deviceCode: string;
+    verifier: string;
+    verificationUri: string;
+    userCode: string;
+    intervalSec: number;
+    deadline: number;
+  }): Promise<Session> {
+    const { deviceCode, verifier, verificationUri, userCode, intervalSec, deadline } = opts;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, Math.max(intervalSec, 2) * 1000));
       const pollBody = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: deviceCode,
         client_id: this.cfg.oidcClientId,
+        code_verifier: verifier,
       });
       const tokenRes = await yaaifFetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
         method: "POST",
@@ -260,8 +398,7 @@ export class AuthClient {
       });
       const raw = (await tokenRes.json()) as Record<string, unknown>;
       if (tokenRes.ok && raw.access_token) {
-        const session = await this.persistTokens(raw);
-        return { session, verification_uri: verificationUri, user_code: userCode };
+        return this.persistTokens(raw);
       }
       const err = String(raw.error ?? "");
       if (err === "authorization_pending" || err === "slow_down") continue;

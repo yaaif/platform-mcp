@@ -1,0 +1,30 @@
+export declare const TOOL_INSTALL_SKILL_ID = "__tool_install";
+export declare const TOOL_REMOVE_SKILL_ID = "__tool_remove";
+export declare const TOOL_INSTALL_DISPATCH_TYPE = "tool_install";
+export declare const TOOL_REMOVE_DISPATCH_TYPE = "tool_remove";
+export declare function collectWorkerIds(workerId?: string, workerIds?: string[]): string[];
+export type DesktopRunLike = {
+    id?: string;
+    worker_id?: string;
+    status?: string;
+    skill_id?: string;
+    created_at?: string;
+    payload?: Record<string, unknown> | null;
+};
+export declare function runDispatchType(run: DesktopRunLike): string;
+export declare function isLifecycleRunForPackage(run: DesktopRunLike, packageId: string, toolKey: string): boolean;
+export declare function latestLifecycleRun(runs: DesktopRunLike[], workerId: string, packageId: string, toolKey: string): DesktopRunLike | null;
+export declare function latestInstalledVersion(runs: DesktopRunLike[], workerId: string, packageId: string, toolKey: string): string;
+export type WorkerPackageAction = "install" | "upgrade" | "retry" | "wait" | "none";
+export type WorkerPackageStatus = {
+    worker_id: string;
+    latest_run_id: string | null;
+    latest_status: string;
+    dispatch_type: string;
+    installed: boolean;
+    installed_version: string;
+    package_version: string;
+    update_available: boolean;
+    recommended_action: WorkerPackageAction;
+};
+export declare function summarizeWorkerPackage(workerId: string, runs: DesktopRunLike[], packageId: string, toolKey: string, packageVersion: string): WorkerPackageStatus;

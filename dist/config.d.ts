@@ -1,12 +1,15 @@
-export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude";
+export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude" | "opencode";
 export type ClientDescriptor = {
     id: BridgeClient;
-    label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code";
+    label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code" | "OpenCode";
     oidcClientId: string;
     stateHomeEnv: string;
     stateHomeSuffix: string;
     updatedBy: string;
 };
+/** Per-user OpenCode workspace: <root>/<subject>/... Default root is /projects/users. */
+export declare function opencodeWorkspaceSubject(cwd: string): string | undefined;
+export declare function opencodeStateHome(subject: string): string;
 export type Config = {
     client: ClientDescriptor;
     oidcAuthority: string;

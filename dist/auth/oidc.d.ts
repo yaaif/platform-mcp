@@ -22,6 +22,7 @@ export declare class AuthClient {
     /**
      * OAuth 2.0 device authorization grant (headless / CI).
      * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
+     * Clients with pkce.code.challenge.method=S256 also require PKCE on device start + token poll.
      */
     deviceLogin(opts?: {
         timeout_ms?: number;

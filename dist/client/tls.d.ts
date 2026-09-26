@@ -35,5 +35,9 @@ export declare function resolveCaFile(cfg: Config, env?: NodeJS.ProcessEnv): Tls
 export declare function installTlsDispatcher(cfg: Config): TlsMaterial | null;
 export declare function getTlsMaterial(): TlsMaterial;
 export declare function getTlsResolveInfo(): TlsResolveInfo;
+export type YaaifFetchInit = Omit<RequestInit, "body"> & {
+    timeoutMs?: number;
+    body?: RequestInit["body"] | Buffer;
+};
 /** fetch()-compatible helper that applies optional extra CA / client mTLS. */
-export declare function yaaifFetch(input: string | URL, init?: RequestInit): Promise<Response>;
+export declare function yaaifFetch(input: string | URL, init?: YaaifFetchInit): Promise<Response>;

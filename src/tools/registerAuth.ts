@@ -339,11 +339,33 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
 
   server.registerTool("yaaif_login_device", {
     description:
-      "Headless/CI device-code login (Keycloak device grant). Requires oauth2.device.authorization.grant.enabled on the active OIDC client.",
-    inputSchema: { timeout_ms: z.number().optional() },
-  }, async ({ timeout_ms }) => {
+      "Headless/CI device-code login (Keycloak device grant + PKCE S256). Returns verification_uri and user_code immediately (status=pending) by default so the agent can show them before MCP tool timeouts; background-polls until authorized. Pass wait=true to block until complete. Requires oauth2.device.authorization.grant.enabled on the active OIDC client.",
+    inputSchema: {
+      timeout_ms: z.number().optional(),
+      wait: z.boolean().optional(),
+    },
+  }, async ({ timeout_ms, wait }) => {
     try {
-      const { session, verification_uri, user_code } = await ctx.auth.deviceLogin({ timeout_ms });
+      const result = await ctx.auth.deviceLogin({ timeout_ms, wait });
+      if (result.status === "pending") {
+        void ctx.telemetry.increment("login_device_pending");
+        const verification_uri = result.verification_uri;
+        const user_code = result.user_code;
+        return ok(
+          [
+            "Device login started.",
+            `Open this URL: ${verification_uri}`,
+            `Enter this code: ${user_code}`,
+            "After the user authorizes, call yaaif_whoami (or yaaif_login_device again).",
+          ].join("\n"),
+          {
+            status: "pending",
+            verification_uri,
+            user_code,
+          },
+        );
+      }
+      const session = result.session!;
       let tenant: unknown;
       try {
         tenant = await autoSelectTenant(ctx);
@@ -352,11 +374,12 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
       }
       void ctx.telemetry.increment("login_device_ok");
       return ok("Device login complete.", {
+        status: "complete",
         email: session.email,
         tenant_id: (await ctx.auth.session())?.tenant_id || session.tenant_id,
         tenant_name: (await ctx.auth.session())?.tenant_name,
-        verification_uri,
-        user_code,
+        verification_uri: result.verification_uri,
+        user_code: result.user_code,
         profile_id: session.profile_id,
         tenant_selection: tenant,
       });

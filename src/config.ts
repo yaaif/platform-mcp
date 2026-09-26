@@ -1,16 +1,40 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude";
+export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude" | "opencode";
 
 export type ClientDescriptor = {
   id: BridgeClient;
-  label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code";
+  label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code" | "OpenCode";
   oidcClientId: string;
   stateHomeEnv: string;
   stateHomeSuffix: string;
   updatedBy: string;
 };
+
+function opencodeWorkspaceRoot(): string {
+  const fromEnv = (process.env.YAAIF_OPENCODE_WORKSPACE_ROOT ?? "").trim();
+  return (fromEnv || "/projects/users").replace(/\/+$/, "");
+}
+
+function opencodeStateRoot(): string {
+  const fromEnv = (process.env.YAAIF_OPENCODE_STATE_ROOT ?? "").trim();
+  return (fromEnv || "/var/lib/opencode/yaaif").replace(/\/+$/, "");
+}
+
+/** Per-user OpenCode workspace: <root>/<subject>/... Default root is /projects/users. */
+export function opencodeWorkspaceSubject(cwd: string): string | undefined {
+  const root = opencodeWorkspaceRoot();
+  if (cwd !== root && !cwd.startsWith(`${root}/`)) return undefined;
+  const rest = cwd.slice(root.length).replace(/^\/+/, "");
+  const subject = rest.split("/")[0]?.trim() ?? "";
+  if (!subject || subject === "." || subject === ".." || subject.includes("..")) return undefined;
+  return subject;
+}
+
+export function opencodeStateHome(subject: string): string {
+  return join(opencodeStateRoot(), subject);
+}
 
 const CLIENTS: Record<BridgeClient, ClientDescriptor> = {
   cursor: {
@@ -53,6 +77,14 @@ const CLIENTS: Record<BridgeClient, ClientDescriptor> = {
     stateHomeSuffix: "claude",
     updatedBy: "yaaif-claude",
   },
+  opencode: {
+    id: "opencode",
+    label: "OpenCode",
+    oidcClientId: "yaaif-opencode",
+    stateHomeEnv: "YAAIF_OPENCODE_HOME",
+    stateHomeSuffix: "opencode",
+    updatedBy: "yaaif-opencode",
+  },
 };
 
 export type Config = {
@@ -90,9 +122,9 @@ export function parseBridgeClient(argv = process.argv.slice(2)): ClientDescripto
     .filter(Boolean);
   if (
     values.length !== 1 ||
-    !["cursor", "vscode", "intellij", "codex", "claude"].includes(values[0])
+    !["cursor", "vscode", "intellij", "codex", "claude", "opencode"].includes(values[0])
   ) {
-    throw new Error("a single --client cursor|vscode|intellij|codex|claude argument is required");
+    throw new Error("a single --client cursor|vscode|intellij|codex|claude|opencode argument is required");
   }
   return CLIENTS[values[0] as BridgeClient];
 }
@@ -106,6 +138,16 @@ function env(name: string, fallback = ""): string {
   // Treat empty / unexpanded plugin-variable placeholders as unset so defaults apply.
   if (!v || /^\$\{[A-Z0-9_]+\}$/.test(v)) return fallback;
   return v;
+}
+
+function resolveStateHome(client: ClientDescriptor, cwd = process.cwd()): string {
+  const fromEnv = env(client.stateHomeEnv);
+  if (fromEnv) return fromEnv;
+  if (client.id === "opencode") {
+    const subject = opencodeWorkspaceSubject(cwd);
+    if (subject) return opencodeStateHome(subject);
+  }
+  return join(homedir(), ".yaaif", client.stateHomeSuffix);
 }
 
 export function loadConfig(client = clientDescriptor("cursor")): Config {
@@ -125,7 +167,7 @@ export function loadConfig(client = clientDescriptor("cursor")): Config {
     ),
     approvalBaseUrl: trimSlash(env("YAAIF_APPROVAL_BASE_URL", `${apiBaseUrl}/approval-service`)),
     defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
-    stateHome: env(client.stateHomeEnv, join(homedir(), ".yaaif", client.stateHomeSuffix)),
+    stateHome: resolveStateHome(client),
     activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),
     extraCaFile: env("YAAIF_EXTRA_CA_FILE", env("NODE_EXTRA_CA_CERTS")),
     clientCertFile: env("YAAIF_CLIENT_CERT_FILE"),

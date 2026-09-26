@@ -30,6 +30,7 @@
     "start:intellij": "node dist/cli.js --client intellij",
     "start:codex": "node dist/cli.js --client codex",
     "start:claude": "node dist/cli.js --client claude",
+    "start:opencode": "node dist/cli.js --client opencode",
     "prepublishOnly": "npm test && npm run build"
   },
   "engines": {
