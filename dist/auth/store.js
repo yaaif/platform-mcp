@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 export class SessionStore {
     path;
     constructor(stateHome) {
@@ -20,6 +20,7 @@ export class SessionStore {
         }
     }
     async save(session) {
+        await this.ensureHome(dirname(this.path));
         const tmp = `${this.path}.tmp`;
         await writeFile(tmp, JSON.stringify(session, null, 2), { mode: 0o600 });
         await rename(tmp, this.path);

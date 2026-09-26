@@ -1,2 +1,5 @@
 node_modules/
 *.tsbuildinfo
+dist/yaaif-platform-mcp.mjs
+dist/yaaif-cursor-mcp.mjs
+docs/local-tools.generated.md

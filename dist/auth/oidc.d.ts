@@ -13,6 +13,7 @@ export declare class IssuerMismatchError extends Error {
 export declare class AuthClient {
     private readonly cfg;
     private readonly store;
+    private devicePending;
     constructor(cfg: Config, store: SessionStore);
     assertIssuerMatch(sess: Session | null): void;
     login(): Promise<{
@@ -23,14 +24,22 @@ export declare class AuthClient {
      * OAuth 2.0 device authorization grant (headless / CI).
      * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
      * Clients with pkce.code.challenge.method=S256 also require PKCE on device start + token poll.
+     *
+     * Default wait=false returns verification_uri/user_code immediately and polls in the
+     * background so MCP hosts (OpenCode/Cursor) do not hit tool timeouts before the agent
+     * can show the code. Pass wait=true for blocking CI flows.
      */
     deviceLogin(opts?: {
         timeout_ms?: number;
+        wait?: boolean;
     }): Promise<{
-        session: Session;
+        status: "complete" | "pending";
+        session?: Session;
         verification_uri: string;
         user_code: string;
     }>;
+    private finishOrReportPending;
+    private pollDeviceTokens;
     private persistTokens;
     logout(opts?: {
         endSession?: boolean;

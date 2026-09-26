@@ -57,9 +57,31 @@ function tokenSetFromJson(raw, previousRefresh) {
 function normalizeAuthority(v) {
     return v.replace(/\/+$/, "").toLowerCase();
 }
+/** Make Keycloak device URLs openable in the user's browser (not host.docker.internal). */
+function browserFacingVerificationUri(uri, authority, userCode) {
+    const auth = authority.replace(/\/+$/, "");
+    let raw = (uri || "").trim();
+    if (!raw) {
+        raw = userCode ? `${auth}/device?user_code=${encodeURIComponent(userCode)}` : `${auth}/device`;
+    }
+    try {
+        const u = new URL(raw);
+        if (u.hostname === "host.docker.internal" || u.hostname === "localhost") {
+            u.hostname = "127.0.0.1";
+        }
+        if (userCode && !u.searchParams.get("user_code")) {
+            u.searchParams.set("user_code", userCode);
+        }
+        return u.toString();
+    }
+    catch {
+        return raw;
+    }
+}
 export class AuthClient {
     cfg;
     store;
+    devicePending = null;
     constructor(cfg, store) {
         this.cfg = cfg;
         this.store = store;
@@ -176,8 +198,17 @@ export class AuthClient {
      * OAuth 2.0 device authorization grant (headless / CI).
      * Requires Keycloak client attribute oauth2.device.authorization.grant.enabled=true.
      * Clients with pkce.code.challenge.method=S256 also require PKCE on device start + token poll.
+     *
+     * Default wait=false returns verification_uri/user_code immediately and polls in the
+     * background so MCP hosts (OpenCode/Cursor) do not hit tool timeouts before the agent
+     * can show the code. Pass wait=true for blocking CI flows.
      */
     async deviceLogin(opts = {}) {
+        const wait = opts.wait === true;
+        const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
+        if (this.devicePending) {
+            return this.finishOrReportPending(wait);
+        }
         await this.store.ensureHome(this.cfg.stateHome);
         const verifier = b64url(randomBytes(32));
         const challenge = b64url(createHash("sha256").update(verifier).digest());
@@ -200,15 +231,82 @@ export class AuthClient {
         }
         const deviceCode = String(startRaw.device_code ?? "");
         const userCode = String(startRaw.user_code ?? "");
-        const verificationUri = String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? "");
+        const verificationUri = browserFacingVerificationUri(String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? ""), this.cfg.oidcAuthority, userCode);
         const intervalSec = typeof startRaw.interval === "number" ? startRaw.interval : 5;
-        const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
         const deadline = Date.now() + timeoutMs;
         if (verificationUri) {
             void open(verificationUri).catch(() => {
                 console.error(`Complete device login at: ${verificationUri} code=${userCode}`);
             });
         }
+        const pending = {
+            deviceCode,
+            verifier,
+            verificationUri,
+            userCode,
+            intervalSec,
+            deadline,
+            pollPromise: this.pollDeviceTokens({
+                deviceCode,
+                verifier,
+                verificationUri,
+                userCode,
+                intervalSec,
+                deadline,
+            }).finally(() => {
+                if (this.devicePending === pending)
+                    this.devicePending = null;
+            }),
+        };
+        this.devicePending = pending;
+        // wait=false returns before the poll finishes. Attach a handler so a later
+        // rejection cannot crash the MCP process and drop the tool list.
+        void pending.pollPromise.catch((err) => {
+            console.error(`device login poll failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+        if (!wait) {
+            return {
+                status: "pending",
+                verification_uri: verificationUri,
+                user_code: userCode,
+            };
+        }
+        return this.finishOrReportPending(true);
+    }
+    async finishOrReportPending(wait) {
+        const pending = this.devicePending;
+        if (!pending) {
+            throw new Error("no device login in progress");
+        }
+        if (!wait) {
+            const settled = await Promise.race([
+                pending.pollPromise.then((session) => ({ done: true, session })),
+                new Promise((r) => setTimeout(() => r({ done: false }), 25)),
+            ]);
+            if (settled.done) {
+                return {
+                    status: "complete",
+                    session: settled.session,
+                    verification_uri: pending.verificationUri,
+                    user_code: pending.userCode,
+                };
+            }
+            return {
+                status: "pending",
+                verification_uri: pending.verificationUri,
+                user_code: pending.userCode,
+            };
+        }
+        const session = await pending.pollPromise;
+        return {
+            status: "complete",
+            session,
+            verification_uri: pending.verificationUri,
+            user_code: pending.userCode,
+        };
+    }
+    async pollDeviceTokens(opts) {
+        const { deviceCode, verifier, verificationUri, userCode, intervalSec, deadline } = opts;
         while (Date.now() < deadline) {
             await new Promise((r) => setTimeout(r, Math.max(intervalSec, 2) * 1000));
             const pollBody = new URLSearchParams({
@@ -224,8 +322,7 @@ export class AuthClient {
             });
             const raw = (await tokenRes.json());
             if (tokenRes.ok && raw.access_token) {
-                const session = await this.persistTokens(raw);
-                return { session, verification_uri: verificationUri, user_code: userCode };
+                return this.persistTokens(raw);
             }
             const err = String(raw.error ?? "");
             if (err === "authorization_pending" || err === "slow_down")

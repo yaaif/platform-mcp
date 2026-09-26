@@ -133,7 +133,7 @@ export function isUnstableCliPath(p: string): boolean {
 export function assertStableCliPath(p: string, allowUnstable = false): void {
   if (!allowUnstable && isUnstableCliPath(p)) {
     throw new Error(
-      `refusing to pin MCP CLI under npx cache (${p}); pass --cli-path to a stable install (npm install -g or packages/mcp/dist/cli.js)`,
+      `refusing to pin MCP CLI under npx cache (${p}); pass --cli-path to a stable install (npm install -g or dist/cli.js)`,
     );
   }
 }

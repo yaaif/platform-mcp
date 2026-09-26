@@ -9,8 +9,9 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const pluginRoot = join(__dirname, "../../..");
-const outPath = join(pluginRoot, "skills/yaaif-platform-tools/references/local-tools.generated.md");
+const packageRoot = join(__dirname, "..");
+const outPath = process.env.YAAIF_LOCAL_TOOLS_OUT
+  || join(packageRoot, "docs/local-tools.generated.md");
 
 async function loadSession() {
   const path = join(homedir(), ".yaaif/cursor/session.json");

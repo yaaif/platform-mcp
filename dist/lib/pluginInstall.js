@@ -94,7 +94,7 @@ export function isUnstableCliPath(p) {
 }
 export function assertStableCliPath(p, allowUnstable = false) {
     if (!allowUnstable && isUnstableCliPath(p)) {
-        throw new Error(`refusing to pin MCP CLI under npx cache (${p}); pass --cli-path to a stable install (npm install -g or packages/mcp/dist/cli.js)`);
+        throw new Error(`refusing to pin MCP CLI under npx cache (${p}); pass --cli-path to a stable install (npm install -g or dist/cli.js)`);
     }
 }
 export function defaultCliJsPath(fromMetaUrl = import.meta.url) {

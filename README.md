@@ -32,7 +32,7 @@ Install these on the **same OS** as the IDE (do not mix WSL Node with Windows Cu
 
 **Not required:** Go/Python/Docker, native `.pkg` / `.msi` / `.deb` installers, S2S secrets, desktop connection keys, or AI-gateway keys.
 
-Run `npx` from your **home directory**, not from `packages/mcp` (that path fails with `yaaif-platform-mcp: command not found`).
+Run `npx` from your **home directory**, not from a checkout of this repo (that path fails with `yaaif-platform-mcp: command not found`).
 
 ```bash
 cd ~

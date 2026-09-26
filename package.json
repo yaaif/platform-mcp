@@ -1,14 +1,13 @@
 {
   "name": "@yaaif/platform-mcp",
   "version": "1.3.5",
-  "description": "YAA\\F platform MCP bridge for Cursor, VS Code, IntelliJ IDEA, Codex, and Claude Code — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), desktop command MCP packages, API keys, ambient, desktop, approvals",
+  "description": "YAA\\F platform MCP bridge for Cursor, VS Code, IntelliJ IDEA, Codex, Claude Code, and OpenCode — ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), desktop command MCP packages, API keys, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
   "author": "YAA\\F / BeezLabs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yaaif/cursor-plugin.git",
-    "directory": "packages/mcp"
+    "url": "git+https://github.com/yaaif/platform-mcp.git"
   },
   "bin": {
     "yaaif-platform-mcp": "dist/cli.js",
@@ -22,7 +21,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node ./scripts/fix-shebang.mjs && npm run bundle && node ./scripts/link-local-bin.mjs",
     "prepare": "node ./scripts/link-local-bin.mjs",
-    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-platform-mcp.mjs --packages=bundle && esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=../../dist/yaaif-cursor-mcp.mjs --packages=bundle",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/yaaif-platform-mcp.mjs --packages=bundle && esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/yaaif-cursor-mcp.mjs --packages=bundle",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "generate:local-tools-ref": "node ./scripts/generate-local-tools-ref.mjs",
     "start": "node dist/cli.js --client cursor",
