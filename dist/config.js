@@ -94,6 +94,13 @@ export function parseBridgeClient(argv = process.argv.slice(2)) {
 function trimSlash(v) {
     return v.replace(/\/+$/, "");
 }
+/** Explicit `YAAIF_DOCS_BASE_URL`, otherwise the docs UI on the platform host. */
+export function resolveDocsBaseUrl(apiBaseUrl) {
+    const explicit = env("YAAIF_DOCS_BASE_URL");
+    if (explicit)
+        return trimSlash(explicit);
+    return `${trimSlash(apiBaseUrl)}/doc-service`;
+}
 function env(name, fallback = "") {
     const v = (process.env[name] ?? "").trim();
     // Treat empty / unexpanded plugin-variable placeholders as unset so defaults apply.
@@ -126,6 +133,7 @@ export function loadConfig(client = clientDescriptor("cursor")) {
         agentBaseUrl: trimSlash(env("YAAIF_AGENT_BASE_URL", `${apiBaseUrl}/agent-service`)),
         controlPlaneBaseUrl: trimSlash(env("YAAIF_CONTROL_PLANE_BASE_URL", `${apiBaseUrl}/control-plane-service`)),
         approvalBaseUrl: trimSlash(env("YAAIF_APPROVAL_BASE_URL", `${apiBaseUrl}/approval-service`)),
+        docsBaseUrl: resolveDocsBaseUrl(apiBaseUrl),
         defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
         stateHome: resolveStateHome(client),
         activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),

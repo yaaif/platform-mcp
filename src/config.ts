@@ -96,6 +96,8 @@ export type Config = {
   agentBaseUrl: string;
   controlPlaneBaseUrl: string;
   approvalBaseUrl: string;
+  /** Product docs. Defaults to `{apiBaseUrl}/doc-service`. */
+  docsBaseUrl: string;
   defaultTenantId: string;
   stateHome: string;
   /** Active named profile id (hosted | local-hybrid | local | custom). */
@@ -133,6 +135,13 @@ function trimSlash(v: string): string {
   return v.replace(/\/+$/, "");
 }
 
+/** Explicit `YAAIF_DOCS_BASE_URL`, otherwise the docs UI on the platform host. */
+export function resolveDocsBaseUrl(apiBaseUrl: string): string {
+  const explicit = env("YAAIF_DOCS_BASE_URL");
+  if (explicit) return trimSlash(explicit);
+  return `${trimSlash(apiBaseUrl)}/doc-service`;
+}
+
 function env(name: string, fallback = ""): string {
   const v = (process.env[name] ?? "").trim();
   // Treat empty / unexpanded plugin-variable placeholders as unset so defaults apply.
@@ -166,6 +175,7 @@ export function loadConfig(client = clientDescriptor("cursor")): Config {
       env("YAAIF_CONTROL_PLANE_BASE_URL", `${apiBaseUrl}/control-plane-service`),
     ),
     approvalBaseUrl: trimSlash(env("YAAIF_APPROVAL_BASE_URL", `${apiBaseUrl}/approval-service`)),
+    docsBaseUrl: resolveDocsBaseUrl(apiBaseUrl),
     defaultTenantId: env("YAAIF_DEFAULT_TENANT_ID"),
     stateHome: resolveStateHome(client),
     activeProfileId: env("YAAIF_PLATFORM_PROFILE", ""),

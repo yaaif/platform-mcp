@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Config } from "../config.js";
+import { resolveDocsBaseUrl, type Config } from "../config.js";
 
 export type PlatformProfile = {
   id: string;
@@ -236,6 +236,7 @@ export function applyProfileToConfig(cfg: Config, profile: PlatformProfile): Con
   cfg.agentBaseUrl = trimSlash(profile.agent_base_url);
   cfg.controlPlaneBaseUrl = trimSlash(profile.control_plane_base_url);
   cfg.approvalBaseUrl = trimSlash(profile.approval_base_url);
+  cfg.docsBaseUrl = resolveDocsBaseUrl(cfg.apiBaseUrl);
   if (profile.oidc_client_id) cfg.oidcClientId = profile.oidc_client_id;
   cfg.activeProfileId = profile.id;
   if (profile.extra_ca_file) cfg.extraCaFile = profile.extra_ca_file;

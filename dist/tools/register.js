@@ -11,6 +11,7 @@ import { registerPlanTools } from "./registerPlan.js";
 import { registerSpecTools } from "./registerSpecs.js";
 import { registerOpsTools } from "./registerOps.js";
 import { registerDoctorTools } from "./registerDoctor.js";
+import { registerDocsTools } from "./registerDocs.js";
 import { registerLocalTools } from "./registerLocalTools.js";
 import { registerFileTools } from "./registerFiles.js";
 import { registerOpsSupportTools } from "./registerOpsSupport.js";
@@ -39,6 +40,7 @@ export function registerAllTools(server, ctx) {
     registerLocalTools(server, ctx);
     registerFileTools(server, ctx);
     registerDoctorTools(server, ctx);
+    registerDocsTools(server, ctx);
 }
 function registerSkills(server, ctx) {
     server.registerTool("yaaif_skill_list", {

@@ -21,6 +21,7 @@ function baseCfg(over: Partial<Config> = {}): Config {
     agentBaseUrl: "https://platform.yaaif.local/agent-service",
     controlPlaneBaseUrl: "https://platform.yaaif.local/control-plane-service",
     approvalBaseUrl: "https://platform.yaaif.local/approval-service",
+    docsBaseUrl: "https://platform.yaaif.local/doc-service",
     defaultTenantId: "",
     stateHome: "/tmp/yaaif-cursor-test",
     activeProfileId: "local-hybrid",

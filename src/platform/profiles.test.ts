@@ -52,9 +52,11 @@ test("ProfileStore upsert and activate custom profile", async () => {
     await store.setActive("customer-prod");
     const active = await store.getActive();
     assert.equal(active?.profile_id, "customer-prod");
+    delete process.env.YAAIF_DOCS_BASE_URL;
     const cfg = loadConfig();
     applyProfileToConfig(cfg, saved);
     assert.equal(cfg.apiBaseUrl, "https://example.com");
+    assert.equal(cfg.docsBaseUrl, "https://example.com/doc-service");
     assert.equal(cfg.activeProfileId, "customer-prod");
   } finally {
     await rm(home, { recursive: true, force: true });

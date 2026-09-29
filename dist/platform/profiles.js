@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveDocsBaseUrl } from "../config.js";
 function trimSlash(v) {
     return v.replace(/\/+$/, "");
 }
@@ -201,6 +202,7 @@ export function applyProfileToConfig(cfg, profile) {
     cfg.agentBaseUrl = trimSlash(profile.agent_base_url);
     cfg.controlPlaneBaseUrl = trimSlash(profile.control_plane_base_url);
     cfg.approvalBaseUrl = trimSlash(profile.approval_base_url);
+    cfg.docsBaseUrl = resolveDocsBaseUrl(cfg.apiBaseUrl);
     if (profile.oidc_client_id)
         cfg.oidcClientId = profile.oidc_client_id;
     cfg.activeProfileId = profile.id;

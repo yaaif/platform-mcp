@@ -25,6 +25,10 @@ export class ApiClient {
     approvalJSON(method, path, body, opts) {
         return this.doJSON(this.cfg.approvalBaseUrl, method, path, body, opts);
     }
+    /** Product docs are public. No bearer token or tenant header. */
+    docsJSON(method, path, opts) {
+        return this.doPublicJSON(this.cfg.docsBaseUrl, method, path, opts);
+    }
     apiForm(method, path, fields, file, opts) {
         return this.doForm(this.cfg.apiBaseUrl, method, path, fields, file, opts);
     }
@@ -41,6 +45,13 @@ export class ApiClient {
         if (tenantId)
             headers["X-Tenant-ID"] = tenantId;
         return headers;
+    }
+    async doPublicJSON(base, method, path, opts) {
+        return this.parseJSON(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+            method,
+            headers: { Accept: "application/json" },
+            timeoutMs: opts?.timeoutMs,
+        }));
     }
     async doJSON(base, method, path, body, opts) {
         const headers = await this.authHeaders(path);

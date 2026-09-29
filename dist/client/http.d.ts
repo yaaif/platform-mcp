@@ -17,8 +17,11 @@ export declare class ApiClient {
     apiJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T>;
     controlPlaneJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T>;
     approvalJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T>;
+    /** Product docs are public. No bearer token or tenant header. */
+    docsJSON<T = unknown>(method: string, path: string, opts?: ApiRequestOpts): Promise<T>;
     apiForm<T = unknown>(method: string, path: string, fields: Record<string, string>, file: ApiFormFile, opts?: ApiRequestOpts): Promise<T>;
     private authHeaders;
+    private doPublicJSON;
     private doJSON;
     private doForm;
     private parseJSON;

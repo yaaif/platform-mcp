@@ -9,6 +9,7 @@ test("loadConfig reads env defaults", () => {
   process.env.YAAIF_CONTROL_PLANE_BASE_URL = "https://example.com/cp/";
   process.env.YAAIF_APPROVAL_BASE_URL = "https://example.com/appr/";
   process.env.YAAIF_OIDC_CLIENT_ID = "yaaif-cursor";
+  delete process.env.YAAIF_DOCS_BASE_URL;
   delete process.env.YAAIF_PLATFORM_PROFILE;
   delete process.env.YAAIF_EXTRA_CA_FILE;
   delete process.env.NODE_EXTRA_CA_CERTS;
@@ -18,6 +19,7 @@ test("loadConfig reads env defaults", () => {
   assert.equal(cfg.agentBaseUrl, "https://example.com/agent-host");
   assert.equal(cfg.controlPlaneBaseUrl, "https://example.com/cp");
   assert.equal(cfg.approvalBaseUrl, "https://example.com/appr");
+  assert.equal(cfg.docsBaseUrl, "https://example.com/api-host/doc-service");
   assert.equal(cfg.oidcClientId, "yaaif-cursor");
   assert.equal(cfg.activeProfileId, "");
   assert.equal(cfg.extraCaFile, "");
@@ -29,6 +31,7 @@ test("loadConfig ignores unexpanded plugin placeholders", () => {
   process.env.YAAIF_AGENT_BASE_URL = "${YAAIF_AGENT_BASE_URL}";
   process.env.YAAIF_CONTROL_PLANE_BASE_URL = "${YAAIF_CONTROL_PLANE_BASE_URL}";
   process.env.YAAIF_APPROVAL_BASE_URL = "${YAAIF_APPROVAL_BASE_URL}";
+  delete process.env.YAAIF_DOCS_BASE_URL;
   delete process.env.YAAIF_OIDC_CLIENT_ID;
   const cfg = loadConfig();
   assert.equal(cfg.oidcAuthority, "https://platform.yaaif.ai/auth/realms/yaaif");
@@ -36,6 +39,7 @@ test("loadConfig ignores unexpanded plugin placeholders", () => {
   assert.equal(cfg.agentBaseUrl, "https://platform.yaaif.ai/agent-service");
   assert.equal(cfg.controlPlaneBaseUrl, "https://platform.yaaif.ai/control-plane-service");
   assert.equal(cfg.approvalBaseUrl, "https://platform.yaaif.ai/approval-service");
+  assert.equal(cfg.docsBaseUrl, "https://platform.yaaif.ai/doc-service");
   assert.equal(cfg.oidcClientId, "yaaif-cursor");
 });
 

@@ -19,6 +19,8 @@ export type Config = {
     agentBaseUrl: string;
     controlPlaneBaseUrl: string;
     approvalBaseUrl: string;
+    /** Product docs. Defaults to `{apiBaseUrl}/doc-service`. */
+    docsBaseUrl: string;
     defaultTenantId: string;
     stateHome: string;
     /** Active named profile id (hosted | local-hybrid | local | custom). */
@@ -32,4 +34,6 @@ export type Config = {
 };
 export declare function clientDescriptor(client: BridgeClient): ClientDescriptor;
 export declare function parseBridgeClient(argv?: string[]): ClientDescriptor;
+/** Explicit `YAAIF_DOCS_BASE_URL`, otherwise the docs UI on the platform host. */
+export declare function resolveDocsBaseUrl(apiBaseUrl: string): string;
 export declare function loadConfig(client?: ClientDescriptor): Config;

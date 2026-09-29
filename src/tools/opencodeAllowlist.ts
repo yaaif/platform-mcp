@@ -121,12 +121,18 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_agent_spec_update",
   "yaaif_agent_spec_coverage",
   "yaaif_agent_spec_readiness",
+  // Product docs for the installed version
+  "yaaif_docs_search",
+  "yaaif_docs_page",
   // Ops read-only
   "yaaif_ops_correlate",
   "yaaif_ops_analyze",
   "yaaif_ops_session_get",
   "yaaif_ops_ambient_run_get",
   "yaaif_ops_telemetry",
+  "yaaif_ops_diagnosis_list",
+  "yaaif_ops_diagnosis_get",
+  "yaaif_ops_diagnosis_create",
 ] as const;
 
 export const OPENCODE_TOOL_ALLOWLIST_SET = new Set<string>(OPENCODE_TOOL_ALLOWLIST);
