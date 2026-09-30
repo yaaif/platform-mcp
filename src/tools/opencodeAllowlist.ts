@@ -121,6 +121,9 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_agent_spec_update",
   "yaaif_agent_spec_coverage",
   "yaaif_agent_spec_readiness",
+  "yaaif_agent_spec_files_list",
+  "yaaif_agent_spec_file_put",
+  "yaaif_agent_spec_file_delete",
   // Product docs for the installed version
   "yaaif_docs_search",
   "yaaif_docs_page",

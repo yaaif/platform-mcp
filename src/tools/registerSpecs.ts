@@ -1420,4 +1420,80 @@ export function registerSpecTools(server: McpServer, ctx: Ctx): void {
       }
     },
   );
+
+  const specFileKind = z.enum([
+    "requirement_analysis",
+    "functional_spec",
+    "technical_spec",
+    "estimate_timeline",
+  ]);
+
+  server.registerTool(
+    "yaaif_agent_spec_files_list",
+    {
+      description:
+        "List customer documents linked to a Scenario: requirement analysis, functional spec, technical spec, and estimate with timeline.",
+      inputSchema: { spec_id: z.string() },
+    },
+    async ({ spec_id }) => {
+      try {
+        return ok("Listed scenario documents.", {
+          result: await ctx.api.agentJSON("GET", specPath(spec_id, "/files")),
+        });
+      } catch (e) {
+        return fail(String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "yaaif_agent_spec_file_put",
+    {
+      description:
+        "Store one customer markdown document on a Scenario as a file-registry item. Replaces the current file for that kind. Kinds: requirement_analysis, functional_spec, technical_spec, estimate_timeline.",
+      inputSchema: {
+        spec_id: z.string(),
+        kind: specFileKind,
+        content: z.string(),
+        title: z.string().optional(),
+        filename: z.string().optional(),
+      },
+    },
+    async ({ spec_id, kind, content, title, filename }) => {
+      const body: Record<string, unknown> = { kind, content };
+      if (title !== undefined) body.title = title;
+      if (filename !== undefined) body.filename = filename;
+      try {
+        return ok("Stored scenario document.", {
+          file: await ctx.api.agentJSON("PUT", specPath(spec_id, "/files"), body),
+        });
+      } catch (e) {
+        return fail(String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "yaaif_agent_spec_file_delete",
+    {
+      description:
+        "Remove the current customer document of one kind from a Scenario. The file-registry bytes are left in place; the scenario link is cleared.",
+      inputSchema: {
+        spec_id: z.string(),
+        kind: specFileKind,
+      },
+    },
+    async ({ spec_id, kind }) => {
+      try {
+        return ok("Removed scenario document.", {
+          result: await ctx.api.agentJSON(
+            "DELETE",
+            specPath(spec_id, `/files/${encodeURIComponent(kind)}`),
+          ),
+        });
+      } catch (e) {
+        return fail(String(e));
+      }
+    },
+  );
 }
