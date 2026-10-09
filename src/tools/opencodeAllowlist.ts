@@ -52,6 +52,9 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_ambient_workflow_create",
   "yaaif_ambient_workflow_update",
   "yaaif_ambient_test_trigger",
+  // File workflows (file.ready / file.failed / file.review_decided)
+  "yaaif_file_workflow_template",
+  "yaaif_file_workflow_create",
   "yaaif_ambient_runs_list",
   "yaaif_ambient_run_get",
   "yaaif_list_ambient_workflows",

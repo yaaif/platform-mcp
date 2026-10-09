@@ -21,6 +21,18 @@ function isTenantBootstrapPath(path: string): boolean {
   );
 }
 
+const MAX_ERROR_TEXT = 500;
+
+/**
+ * Error bodies go straight into the model's context. A gateway error page or a
+ * stack trace can be many kilobytes, so keep the start and say what was cut.
+ */
+export function boundedErrorText(text: string, max = MAX_ERROR_TEXT): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max)}… [truncated ${trimmed.length - max} chars]`;
+}
+
 export class ApiClient {
   constructor(
     readonly cfg: Config,
@@ -133,9 +145,13 @@ export class ApiClient {
   private async parseJSON<T>(method: string, path: string, res: Response): Promise<T> {
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`${method} ${path} failed (${res.status}): ${text.trim()}`);
+      throw new Error(`${method} ${path} failed (${res.status}): ${boundedErrorText(text)}`);
     }
     if (!text.trim() || res.status === 204) return undefined as T;
-    return JSON.parse(text) as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(`${method} ${path} returned a non-JSON response (${res.status}): ${boundedErrorText(text, 200)}`);
+    }
   }
 }

@@ -16,6 +16,7 @@ import { registerDoctorTools } from "./registerDoctor.js";
 import { registerDocsTools } from "./registerDocs.js";
 import { registerLocalTools } from "./registerLocalTools.js";
 import { registerFileTools } from "./registerFiles.js";
+import { registerFileWorkflowTools } from "./registerFileWorkflows.js";
 import { registerOpsSupportTools } from "./registerOpsSupport.js";
 import { registerApiKeyTools } from "./registerApiKeys.js";
 import { registerMcpDeploymentTools } from "./registerMcpDeployments.js";
@@ -44,6 +45,7 @@ export function registerAllTools(server: McpServer, ctx: Ctx): void {
   registerOpsSupportTools(server, ctx);
   registerLocalTools(server, ctx);
   registerFileTools(server, ctx);
+  registerFileWorkflowTools(server, ctx);
   registerDoctorTools(server, ctx);
   registerDocsTools(server, ctx);
 }

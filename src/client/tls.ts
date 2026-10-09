@@ -215,10 +215,85 @@ export function getTlsResolveInfo(): TlsResolveInfo {
 export type YaaifFetchInit = Omit<RequestInit, "body"> & {
   timeoutMs?: number;
   body?: RequestInit["body"] | Buffer;
+  /** Extra attempts after a transient failure. Defaults to 2 for GET/HEAD and 0 otherwise. */
+  retries?: number;
 };
 
-/** fetch()-compatible helper that applies optional extra CA / client mTLS. */
+// One keep-alive agent per TLS material. A new agent per request repeats the
+// TCP and mTLS handshake, and rebuilds the CA context, on every tool call.
+let agentMaterial: TlsMaterial | null = null;
+let sharedHttpsAgent: https.Agent | null = null;
+let sharedHttpAgent: http.Agent | null = null;
+
+function sharedAgent(isHttps: boolean): https.Agent | http.Agent {
+  const tlsOpts = getTlsMaterial();
+  if (agentMaterial !== tlsOpts) {
+    sharedHttpsAgent?.destroy();
+    sharedHttpAgent?.destroy();
+    sharedHttpsAgent = null;
+    sharedHttpAgent = null;
+    agentMaterial = tlsOpts;
+  }
+  if (isHttps) {
+    sharedHttpsAgent ??= new https.Agent({
+      keepAlive: true,
+      maxSockets: 16,
+      ...(tlsOpts.ca ? { ca: tlsOpts.ca } : {}),
+      ...(tlsOpts.cert && tlsOpts.key ? { cert: tlsOpts.cert, key: tlsOpts.key } : {}),
+    });
+    return sharedHttpsAgent;
+  }
+  sharedHttpAgent ??= new http.Agent({ keepAlive: true, maxSockets: 16 });
+  return sharedHttpAgent;
+}
+
+const TRANSIENT_STATUS = new Set([502, 503, 504]);
+const TRANSIENT_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EPIPE"]);
+const RETRY_DELAYS_MS = [250, 750];
+
+type StaleSocketError = Error & { code?: string; staleSocket?: boolean };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * fetch()-compatible helper that applies optional extra CA / client mTLS.
+ * GET and HEAD retry briefly on gateway errors and connection resets, which is
+ * what a service restart looks like. A reused keep-alive socket that the server
+ * already closed is retried once for any method, because that request never ran.
+ */
 export async function yaaifFetch(input: string | URL, init: YaaifFetchInit = {}): Promise<Response> {
+  const method = (init.method || "GET").toUpperCase();
+  const idempotent = method === "GET" || method === "HEAD";
+  const retries = Math.min(init.retries ?? (idempotent ? RETRY_DELAYS_MS.length : 0), RETRY_DELAYS_MS.length);
+  let staleRetried = false;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await yaaifFetchOnce(input, init);
+      if (idempotent && attempt < retries && TRANSIENT_STATUS.has(res.status)) {
+        await sleep(RETRY_DELAYS_MS[attempt]!);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      const e = err as StaleSocketError;
+      if (e.name === "AbortError" || init.signal?.aborted) throw err;
+      if (e.staleSocket && !staleRetried) {
+        staleRetried = true;
+        attempt--;
+        continue;
+      }
+      if (idempotent && attempt < retries && e.code && TRANSIENT_CODES.has(e.code)) {
+        await sleep(RETRY_DELAYS_MS[attempt]!);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+async function yaaifFetchOnce(input: string | URL, init: YaaifFetchInit): Promise<Response> {
   const url = typeof input === "string" ? new URL(input) : input;
   const isHttps = url.protocol === "https:";
   const headers = new Headers(init.headers);
@@ -233,13 +308,7 @@ export async function yaaifFetch(input: string | URL, init: YaaifFetchInit = {})
     headers.set("Content-Length", String(body.length));
   }
 
-  const tlsOpts = getTlsMaterial();
-  const agent = isHttps
-    ? new https.Agent({
-      ...(tlsOpts.ca ? { ca: tlsOpts.ca } : {}),
-      ...(tlsOpts.cert && tlsOpts.key ? { cert: tlsOpts.cert, key: tlsOpts.key } : {}),
-    })
-    : new http.Agent();
+  const agent = sharedAgent(isHttps);
 
   return new Promise((resolve, reject) => {
     const reqFn = isHttps ? https.request : http.request;
@@ -267,7 +336,10 @@ export async function yaaifFetch(input: string | URL, init: YaaifFetchInit = {})
         });
       },
     );
-    req.on("error", reject);
+    req.on("error", (err: StaleSocketError) => {
+      if (req.reusedSocket && err.code === "ECONNRESET") err.staleSocket = true;
+      reject(err);
+    });
     req.setTimeout(init.timeoutMs ?? 30_000, () => {
       req.destroy(new Error(`request timed out: ${url.toString()}`));
     });

@@ -7,6 +7,14 @@ import type { Config } from "../config.js";
 import { renderLoginCallbackPage } from "./callbackPage.js";
 import type { Session, SessionStore, TokenSet } from "./store.js";
 
+/** The identity provider refused the refresh token itself (invalid_grant, revoked, expired). */
+export class RefreshRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RefreshRejectedError";
+  }
+}
+
 export class ReauthRequiredError extends Error {
   readonly code = "reauth_required";
   constructor(message: string) {
@@ -476,13 +484,44 @@ export class AuthClient {
       await this.store.clear();
       throw new ReauthRequiredError("access token expired and no refresh token; call yaaif_login again");
     }
+    sess = await this.refreshOnce(sess);
+    return { token: sess.tokens.access_token, session: sess };
+  }
+
+  /**
+   * OpenCode runs tool calls in parallel, so several can find the token expired
+   * at once. Rotating refresh tokens only allow one use, so share one refresh.
+   */
+  private refreshing: Promise<Session> | null = null;
+
+  private refreshOnce(sess: Session): Promise<Session> {
+    if (!this.refreshing) {
+      this.refreshing = this.refreshOrRecover(sess).finally(() => {
+        this.refreshing = null;
+      });
+    }
+    return this.refreshing;
+  }
+
+  private async refreshOrRecover(sess: Session): Promise<Session> {
+    const used = sess.tokens.refresh_token;
     try {
-      sess = await this.refresh(sess);
+      return await this.refresh(sess);
     } catch (e) {
-      await this.store.clear();
+      if (!(e instanceof RefreshRejectedError)) {
+        // Network errors and 5xx say nothing about the refresh token. Keep the
+        // session so the next call can retry instead of forcing a full login.
+        throw new Error(`token refresh temporarily failed; retry the call (${String(e)})`);
+      }
+      // Another MCP process may have rotated the token and saved it already.
+      const latest = await this.store.load();
+      const latestExpiry = Date.parse(latest?.tokens.expiry ?? "");
+      if (latest?.tokens.access_token && latest.tokens.refresh_token !== used && latestExpiry - Date.now() > 45_000) {
+        return latest;
+      }
+      if (!latest || latest.tokens.refresh_token === used) await this.store.clear();
       throw new ReauthRequiredError(`token refresh failed; call yaaif_login again (${String(e)})`);
     }
-    return { token: sess.tokens.access_token, session: sess };
   }
 
   private async refresh(sess: Session): Promise<Session> {
@@ -497,9 +536,16 @@ export class AuthClient {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
     });
-    const raw = (await tokenRes.json()) as Record<string, unknown>;
+    const text = await tokenRes.text();
+    let raw: Record<string, unknown> = {};
+    try {
+      raw = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // A proxy error page is not a verdict on the refresh token.
+    }
     if (!tokenRes.ok) {
-      throw new Error(`refresh token failed (${tokenRes.status}): ${JSON.stringify(raw)}`);
+      const detail = `refresh token failed (${tokenRes.status}): ${text.trim().slice(0, 300)}`;
+      throw tokenRes.status === 400 || tokenRes.status === 401 ? new RefreshRejectedError(detail) : new Error(detail);
     }
     sess.tokens = tokenSetFromJson(raw, sess.tokens.refresh_token);
     if (sess.tokens.id_token) {

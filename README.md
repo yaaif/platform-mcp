@@ -141,6 +141,33 @@ MCP start command: `npx -y @yaaif/platform-mcp@1.3.7 --client codex`.
 
 ---
 
+## File workflows (all IDEs and OpenCode)
+
+Two tools build and install **file workflows**: ambient workflows that run when an uploaded file finishes
+extraction (`file.ready`, `file.failed`, `file.review_decided`), optionally load the extracted text or
+tables, run your own tool steps and reply to where the file came from (chat, Teams, Lark, email). They are
+registered for every client (`cursor`, `vscode`, `intellij`, `claude`, `codex`, `opencode`) and are on the
+OpenCode allowlist.
+
+| Tool | What it does |
+|---|---|
+| `yaaif_file_workflow_template` | Builds the workflow definitions (one workflow + trigger rule per event) and returns the event / payload reference. Installs nothing. |
+| `yaaif_file_workflow_create` | Installs them under an ambient agent (`ambient_agent_id`); `dry_run: true` previews the exact bodies. |
+
+Options (both tools): `name`, `events`, `agent_id` or `filter_contains` (scope), `load_content`,
+`load_tables`, `steps[]` (`tool_name`, `input` bindings, `output_key`), `reply`, `message_binding`, `enabled`.
+Rules are per tenant and match source `file` exactly; the workflow runs as the uploader.
+
+Ask your assistant, for example:
+
+> Create a file workflow on ambient agent `<id>`: when a PDF from chat agent `<id>` finishes extraction, load its
+> tables, call `erp_post_price_changes` with them and tell the uploader the result.
+
+Cursor, Claude Code and Codex also ship the `yaaif-create-file-workflow` skill (command
+`yaaif-new-file-workflow`) that walks through the questions and the test. Full flow and payload reference:
+`agent-service/docs/file-workflows.md` in the YAAIF repository; example pack:
+`examples/workflow-packs/file-intake-workflow-pack/`.
+
 ## Profiles
 
 | Profile | When |
