@@ -116,6 +116,10 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_load_artifacts",
   "yaaif_file_share_link",
   "yaaif_generate_file",
+  "yaaif_file_generate",
+  "yaaif_file_convert",
+  "yaaif_file_transform",
+  "yaaif_file_fill_template",
   "yaaif_session_files_list",
   // Specs (read + light write)
   "yaaif_agent_spec_list",

@@ -18,6 +18,10 @@ const FILE_LOCAL_ALIASES = [
   "yaaif_load_artifacts",
   "yaaif_file_share_link",
   "yaaif_generate_file",
+  "yaaif_file_generate",
+  "yaaif_file_convert",
+  "yaaif_file_transform",
+  "yaaif_file_fill_template",
 ] as const;
 
 const FILE_HTTP_TOOLS = [
@@ -45,7 +49,9 @@ test("file local aliases cover ADK artifact surface", () => {
   assert.ok(FILE_LOCAL_ALIASES.includes("yaaif_file_load_context"));
   assert.ok(FILE_LOCAL_ALIASES.includes("yaaif_files_list"));
   assert.ok(FILE_LOCAL_ALIASES.includes("yaaif_generate_file"));
-  assert.equal(FILE_LOCAL_ALIASES.length, 6);
+  assert.ok(FILE_LOCAL_ALIASES.includes("yaaif_file_generate"));
+  assert.ok(FILE_LOCAL_ALIASES.includes("yaaif_file_transform"));
+  assert.equal(FILE_LOCAL_ALIASES.length, 10);
 });
 
 test("file HTTP tools cover artifact versions + extracted", () => {

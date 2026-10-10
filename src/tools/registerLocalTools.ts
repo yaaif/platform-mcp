@@ -267,6 +267,26 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
   alias(
     "yaaif_generate_file",
     "generate_file",
-    "Create a downloadable file in the session via generate_file (returns file_id / artifact_name).",
+    "Create a downloadable file in the session via generate_file (returns file_id / artifact_name). Plain text/code only: use yaaif_file_generate for xlsx/docx/pptx/pdf.",
+  );
+  alias(
+    "yaaif_file_generate",
+    "file_generate",
+    "Build a csv/tsv/xlsx/docx/pptx/md/html/pdf file from markdown, sheets, a slide outline, a table_ref of an uploaded document or an existing file_id (arguments: format, name, source, options). The platform writes the bytes; never pass base64.",
+  );
+  alias(
+    "yaaif_file_convert",
+    "file_convert",
+    "Convert a file to another format via file_convert (csv⇄xlsx, md→docx/pptx/html/pdf, docx/xlsx/pptx→pdf, any document→md/txt). Arguments: file_id, to, name, options.",
+  );
+  alias(
+    "yaaif_file_transform",
+    "file_transform",
+    "Edit/reshape a file via file_transform and save the result as a NEW file (arguments: file_id, operations[], output_name, sheet, format, mode). CSV/XLSX: select/drop/rename/filter/sort/dedupe/compute/group/join/append/split + xlsx cell edits; PDF: merge/extract_pages/delete_pages/rotate/split; DOCX/MD: replace_text/replace_section/delete_section/append.",
+  );
+  alias(
+    "yaaif_file_fill_template",
+    "file_fill_template",
+    "Fill a docx/xlsx/md/txt template containing {{placeholders}} and {{#rows}}...{{/rows}} loops via file_fill_template (arguments: template_file_id, data, output_name, to_pdf).",
   );
 }

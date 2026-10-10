@@ -141,6 +141,26 @@ MCP start command: `npx -y @yaaif/platform-mcp@1.3.7 --client codex`.
 
 ---
 
+## File generation and editing (all IDEs and OpenCode)
+
+Four tools call the platform's file generator and manipulator, so a prompt such as "turn this table into an Excel
+file", "merge these two PDFs" or "fill the invoice template" produces a real, styled file (a download card in the
+session) without hand-writing bytes. They map to the agent-service local tools of the same name and are on the
+OpenCode allowlist.
+
+| Tool | Arguments | Result |
+|---|---|---|
+| `yaaif_file_generate` | `format` (csv, tsv, xlsx, docx, pptx, md, html, pdf), `name`, `source` (one of `markdown`, `sheets`, `outline`, `table_ref`, `file_id`), `options` | A new file |
+| `yaaif_file_convert` | `file_id`, `to`, `name`, `options` | csv⇄xlsx, md→docx/pptx/html/pdf, docx/xlsx/pptx→pdf, any document→md/txt |
+| `yaaif_file_transform` | `file_id`, `operations[]`, `output_name`, `sheet`, `format`, `mode` | Edited copy (filter, sort, compute, group, join; PDF merge/split/extract/rotate; docx/md section replace; xlsx cell edits) |
+| `yaaif_file_fill_template` | `template_file_id`, `data`, `output_name`, `to_pdf` | Filled copy of a docx/xlsx/md template with `{{placeholders}}` and `{{#rows}}` loops |
+
+Pass the arguments inside `arguments` and call `yaaif_dev_session_ensure` first so the files land in your authoring
+session. Source files are read with the caller's file permissions; the original is never modified (`mode: "new_version"`
+stores the result as the next version of the same artifact). Full reference: `agent-service/docs/file-generation.md`.
+
+---
+
 ## File workflows (all IDEs and OpenCode)
 
 Two tools build and install **file workflows**: ambient workflows that run when an uploaded file finishes
