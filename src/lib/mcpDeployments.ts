@@ -17,6 +17,8 @@ export type DeploymentRecord = {
   name?: string;
   image?: string;
   registry_credential_id?: string;
+  source_git_remote_url?: string;
+  source_git_credential_id?: string;
   deployment_method?: string;
   container_port?: number;
   mcp_path?: string;
@@ -73,6 +75,8 @@ export type DeploymentUpdateOverrides = {
   name?: string;
   image?: string;
   registry_credential_id?: string | null;
+  source_git_remote_url?: string | null;
+  source_git_credential_id?: string | null;
   deployment_method?: string;
   container_port?: number;
   mcp_path?: string;
@@ -118,6 +122,17 @@ export function deploymentToUpdateBody(
     }
   } else if (deployment.registry_credential_id) {
     body.registry_credential_id = deployment.registry_credential_id;
+  }
+
+  if ("source_git_remote_url" in overrides) {
+    body.source_git_remote_url = overrides.source_git_remote_url ?? "";
+  } else if (deployment.source_git_remote_url) {
+    body.source_git_remote_url = deployment.source_git_remote_url;
+  }
+  if ("source_git_credential_id" in overrides) {
+    body.source_git_credential_id = overrides.source_git_credential_id ?? "";
+  } else if (deployment.source_git_credential_id) {
+    body.source_git_credential_id = deployment.source_git_credential_id;
   }
 
   if ("endpoint_host" in overrides) {

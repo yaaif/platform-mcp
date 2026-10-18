@@ -714,6 +714,40 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
     } catch (e) { return fail(String(e)); }
   });
 
+  server.registerTool("yaaif_mcp_tool_set_enabled", {
+    description:
+      "Enable or disable registered MCP catalog tools without redeploying or re-probing the server. Pass tool_names and/or tool_ids. Optional server_id limits the match to one server. Disabled tools stay registered and leave the agent catalog.",
+    inputSchema: {
+      enabled: z.boolean(),
+      tool_names: z.array(z.string()).optional(),
+      tool_ids: z.array(z.string()).optional(),
+      server_id: z.string().optional(),
+    },
+  }, async ({ enabled, tool_names, tool_ids, server_id }) => {
+    const names = (tool_names ?? []).map((name) => name.trim()).filter(Boolean);
+    const ids = (tool_ids ?? []).map((id) => id.trim()).filter(Boolean);
+    if (!names.length && !ids.length) return fail("tool_names or tool_ids is required");
+    try {
+      const result = await ctx.api.agentJSON<{ updated?: unknown[]; missing?: string[] }>(
+        "POST",
+        "/api/mcp-tools/enabled",
+        {
+          enabled,
+          tool_names: names,
+          tool_ids: ids,
+          ...(server_id ? { server_id } : {}),
+        },
+      );
+      const updated = Array.isArray(result?.updated) ? result.updated.length : 0;
+      if (!updated) return fail("No matching MCP tools.", { result });
+      const missing = Array.isArray(result?.missing) ? result.missing : [];
+      const summary = missing.length
+        ? `Set enabled=${enabled} on ${updated} MCP tool(s). Unmatched: ${missing.join(", ")}.`
+        : `Set enabled=${enabled} on ${updated} MCP tool(s).`;
+      return ok(summary, { result });
+    } catch (e) { return fail(String(e)); }
+  });
+
   server.registerTool("yaaif_mcp_servers_list", {
     description: "List registered external MCP servers in the tenant catalog.",
     inputSchema: { q: z.string().optional(), limit: z.number().optional() },

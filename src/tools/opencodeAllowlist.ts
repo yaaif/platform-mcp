@@ -63,8 +63,11 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_catalog_overview",
   "yaaif_mcp_servers_list",
   "yaaif_mcp_server_get",
+  "yaaif_mcp_source_pull",
+  "yaaif_mcp_source_push",
   "yaaif_mcp_tools_list",
   "yaaif_mcp_tool_get",
+  "yaaif_mcp_tool_set_enabled",
   "yaaif_mcp_server_refresh",
   // MCP deployments
   "yaaif_deployment_settings_get",

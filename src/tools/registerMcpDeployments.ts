@@ -110,6 +110,8 @@ export function registerMcpDeploymentTools(server: McpServer, ctx: Ctx): void {
       auto_register: z.boolean().optional(),
       auto_import_tools: z.boolean().optional(),
       registry_credential_id: z.string().optional(),
+      source_git_remote_url: z.string().optional().describe("Optional https git remote for this MCP server's source. Not required."),
+      source_git_credential_id: z.string().optional().describe("Optional credential id of a git-pat or skill-repo-git credential. The token is not returned."),
 	  spec_id: z.string().optional(),
 	  slot_key: z.string().optional(),
 	  spec_version: z.number().int().positive().optional(),
@@ -134,6 +136,8 @@ export function registerMcpDeploymentTools(server: McpServer, ctx: Ctx): void {
       };
       if (args.endpoint_host) body.endpoint_host = args.endpoint_host;
       if (args.registry_credential_id) body.registry_credential_id = args.registry_credential_id;
+      if (args.source_git_remote_url) body.source_git_remote_url = args.source_git_remote_url;
+      if (args.source_git_credential_id) body.source_git_credential_id = args.source_git_credential_id;
       const deployment = await ctx.api.apiJSON<DeploymentRecord>("POST", "/api/mcp-deployments", body);
 	  let scenario_binding: unknown;
 	  if (args.spec_id && args.slot_key && args.spec_version && deployment.external_mcp_server_id) {
@@ -194,6 +198,10 @@ export function registerMcpDeploymentTools(server: McpServer, ctx: Ctx): void {
       auto_import_tools: z.boolean().optional(),
       registry_credential_id: z.string().optional(),
       clear_registry_credential_id: z.boolean().optional(),
+      source_git_remote_url: z.string().optional().describe("Optional https git remote for this MCP server's source."),
+      clear_source_git_remote_url: z.boolean().optional(),
+      source_git_credential_id: z.string().optional().describe("Credential id of a git-pat or skill-repo-git credential. Does not return the token."),
+      clear_source_git_credential_id: z.boolean().optional(),
     },
   }, async (args) => {
     try {
@@ -221,6 +229,12 @@ export function registerMcpDeploymentTools(server: McpServer, ctx: Ctx): void {
       if (args.clear_registry_credential_id) overrides.registry_credential_id = null;
       else if (args.registry_credential_id !== undefined) {
         overrides.registry_credential_id = args.registry_credential_id;
+      }
+      if (args.clear_source_git_remote_url) overrides.source_git_remote_url = null;
+      else if (args.source_git_remote_url !== undefined) overrides.source_git_remote_url = args.source_git_remote_url;
+      if (args.clear_source_git_credential_id) overrides.source_git_credential_id = null;
+      else if (args.source_git_credential_id !== undefined) {
+        overrides.source_git_credential_id = args.source_git_credential_id;
       }
 
       const body = deploymentToUpdateBody(deployment, overrides);
@@ -427,6 +441,34 @@ export function registerMcpDeploymentTools(server: McpServer, ctx: Ctx): void {
       return fail(String(e));
     }
   });
+
+  // These resolve the mapped Git PAT. Only the OpenCode bridge may call them.
+  if (ctx.cfg.client.id === "opencode") {
+    server.registerTool("yaaif_mcp_source_pull", {
+      description:
+        "Clone or update an MCP server's git remote into the OpenCode project. Uses the deployment's mapped Git PAT on the platform. Never returns the token. No-ops with a clear message when the server has no source remote.",
+      inputSchema: { server_id: z.string() },
+    }, async ({ server_id }) => syncMCPSource(ctx, server_id, "pull"));
+
+    server.registerTool("yaaif_mcp_source_push", {
+      description:
+        "Push the current branch of an MCP server's OpenCode project to its git remote using the mapped Git PAT. Never returns the token. Image build and redeploy stay separate.",
+      inputSchema: { server_id: z.string() },
+    }, async ({ server_id }) => syncMCPSource(ctx, server_id, "push"));
+  }
+}
+
+async function syncMCPSource(ctx: Ctx, serverID: string, action: "pull" | "push") {
+  try {
+    const result = await ctx.api.apiJSON<Record<string, unknown>>("POST", "/api/opencode/source-git", {
+      server_id: serverID,
+      action,
+    });
+    const message = typeof result.message === "string" && result.message ? result.message : `Source git ${action} finished.`;
+    return ok(message, { result });
+  } catch (e) {
+    return fail(String(e));
+  }
 }
 
 function isK8s(method?: string): boolean {

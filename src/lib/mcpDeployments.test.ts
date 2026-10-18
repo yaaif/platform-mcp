@@ -54,3 +54,29 @@ test("deploymentToUpdateBody clears endpoint_host when null override", () => {
   assert.equal(body.transport_type, "STREAMABLE_HTTP");
   assert.equal("endpoint_host" in body, false);
 });
+
+test("deploymentToUpdateBody round-trips source git fields", () => {
+  const body = deploymentToUpdateBody(
+    {
+      name: "demo",
+      image: "img:1",
+      source_git_remote_url: "https://github.com/acme/mcp.git",
+      source_git_credential_id: "cred-1",
+    },
+    {},
+  );
+  assert.equal(body.source_git_remote_url, "https://github.com/acme/mcp.git");
+  assert.equal(body.source_git_credential_id, "cred-1");
+
+  const cleared = deploymentToUpdateBody(
+    {
+      name: "demo",
+      image: "img:1",
+      source_git_remote_url: "https://github.com/acme/mcp.git",
+      source_git_credential_id: "cred-1",
+    },
+    { source_git_remote_url: null, source_git_credential_id: "" },
+  );
+  assert.equal(cleared.source_git_remote_url, "");
+  assert.equal(cleared.source_git_credential_id, "");
+});

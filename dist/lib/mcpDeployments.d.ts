@@ -14,6 +14,8 @@ export type DeploymentRecord = {
     name?: string;
     image?: string;
     registry_credential_id?: string;
+    source_git_remote_url?: string;
+    source_git_credential_id?: string;
     deployment_method?: string;
     container_port?: number;
     mcp_path?: string;
@@ -45,6 +47,8 @@ export type DeploymentUpdateOverrides = {
     name?: string;
     image?: string;
     registry_credential_id?: string | null;
+    source_git_remote_url?: string | null;
+    source_git_credential_id?: string | null;
     deployment_method?: string;
     container_port?: number;
     mcp_path?: string;

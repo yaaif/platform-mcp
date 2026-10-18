@@ -31,5 +31,8 @@ test("editor descriptors share the full YAAIF MCP tool contract", () => {
   assert.deepEqual(intellij, cursor);
   assert.deepEqual(codex, cursor);
   assert.deepEqual(claude, cursor);
-  assert.deepEqual(opencode, cursor);
+  assert.equal(cursor.includes("yaaif_mcp_source_pull"), false);
+  assert.equal(cursor.includes("yaaif_mcp_source_push"), false);
+  const opencodeOnly = opencode.filter((name) => !cursor.includes(name));
+  assert.deepEqual(opencodeOnly, ["yaaif_mcp_source_pull", "yaaif_mcp_source_push"]);
 });

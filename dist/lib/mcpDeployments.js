@@ -50,6 +50,18 @@ export function deploymentToUpdateBody(deployment, overrides = {}) {
     else if (deployment.registry_credential_id) {
         body.registry_credential_id = deployment.registry_credential_id;
     }
+    if ("source_git_remote_url" in overrides) {
+        body.source_git_remote_url = overrides.source_git_remote_url ?? "";
+    }
+    else if (deployment.source_git_remote_url) {
+        body.source_git_remote_url = deployment.source_git_remote_url;
+    }
+    if ("source_git_credential_id" in overrides) {
+        body.source_git_credential_id = overrides.source_git_credential_id ?? "";
+    }
+    else if (deployment.source_git_credential_id) {
+        body.source_git_credential_id = deployment.source_git_credential_id;
+    }
     if ("endpoint_host" in overrides) {
         if (overrides.endpoint_host)
             body.endpoint_host = overrides.endpoint_host;

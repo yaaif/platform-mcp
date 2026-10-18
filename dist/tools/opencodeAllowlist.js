@@ -52,6 +52,9 @@ export const OPENCODE_TOOL_ALLOWLIST = [
     "yaaif_ambient_workflow_create",
     "yaaif_ambient_workflow_update",
     "yaaif_ambient_test_trigger",
+    // File workflows (file.ready / file.failed / file.review_decided)
+    "yaaif_file_workflow_template",
+    "yaaif_file_workflow_create",
     "yaaif_ambient_runs_list",
     "yaaif_ambient_run_get",
     "yaaif_list_ambient_workflows",
@@ -60,8 +63,11 @@ export const OPENCODE_TOOL_ALLOWLIST = [
     "yaaif_catalog_overview",
     "yaaif_mcp_servers_list",
     "yaaif_mcp_server_get",
+    "yaaif_mcp_source_pull",
+    "yaaif_mcp_source_push",
     "yaaif_mcp_tools_list",
     "yaaif_mcp_tool_get",
+    "yaaif_mcp_tool_set_enabled",
     "yaaif_mcp_server_refresh",
     // MCP deployments
     "yaaif_deployment_settings_get",
@@ -113,6 +119,10 @@ export const OPENCODE_TOOL_ALLOWLIST = [
     "yaaif_load_artifacts",
     "yaaif_file_share_link",
     "yaaif_generate_file",
+    "yaaif_file_generate",
+    "yaaif_file_convert",
+    "yaaif_file_transform",
+    "yaaif_file_fill_template",
     "yaaif_session_files_list",
     // Specs (read + light write)
     "yaaif_agent_spec_list",
@@ -121,6 +131,9 @@ export const OPENCODE_TOOL_ALLOWLIST = [
     "yaaif_agent_spec_update",
     "yaaif_agent_spec_coverage",
     "yaaif_agent_spec_readiness",
+    "yaaif_agent_spec_files_list",
+    "yaaif_agent_spec_file_put",
+    "yaaif_agent_spec_file_delete",
     // Product docs for the installed version
     "yaaif_docs_search",
     "yaaif_docs_page",
@@ -130,5 +143,8 @@ export const OPENCODE_TOOL_ALLOWLIST = [
     "yaaif_ops_session_get",
     "yaaif_ops_ambient_run_get",
     "yaaif_ops_telemetry",
+    "yaaif_ops_diagnosis_list",
+    "yaaif_ops_diagnosis_get",
+    "yaaif_ops_diagnosis_create",
 ];
 export const OPENCODE_TOOL_ALLOWLIST_SET = new Set(OPENCODE_TOOL_ALLOWLIST);
