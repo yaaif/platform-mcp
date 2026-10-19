@@ -393,6 +393,7 @@ export function registerMcpDeploymentTools(server, ctx) {
             return fail(String(e));
         }
     });
+    // These resolve the mapped Git PAT. Only the OpenCode bridge may call them.
     if (ctx.cfg.client.id === "opencode") {
         server.registerTool("yaaif_mcp_source_pull", {
             description: "Clone or update an MCP server's git remote into the OpenCode project. Uses the deployment's mapped Git PAT on the platform. Never returns the token. No-ops with a clear message when the server has no source remote.",

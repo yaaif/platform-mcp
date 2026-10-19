@@ -213,3 +213,33 @@ node dist/cli.js --client cursor
 ## License
 
 Apache-2.0
+
+## Tenant governance
+
+`yaaif-governance` gathers authorized tenant business context, interviews for missing requirements, diagnoses failures, and prepares guardrail/harness policy changes. It starts with effective permissions and uses a preview → explicit confirmation → apply workflow. It never grants permissions or treats tenant documents as authorization. Retention is inspection only; infrastructure, data purges and run controls are excluded.
+
+OpenCode: `/yaaif-governance`. Cursor/Claude Code: the `yaaif-governance` command or skill. Codex: `$yaaif-governance`. VS Code/JetBrains: **YAAIF: Governance Agent** (JetBrains copies the bundled instructions for AI Assistant).
+
+Requires a bridge and backend containing the governance tools, validation routes and conditional-write middleware. Prepare and test the packages together before publishing; do not point a live install at an unpublished version. A saved configuration does not by itself prove runtime enforcement.
+
+### Governance tool contract
+
+- `yaaif_governance_capabilities`: resolve the signed-in subject, tenant and effective permissions; list supported resources and actions. Permission discovery errors stop configuration.
+- `yaaif_governance_inspect`: typed, paginated resource reads, including individual policies, overrides, rollouts and evaluation candidates. `dry_run` evaluates supplied samples; `replay_start` creates an evaluation job and `replay` reads its status. These evaluations do not change live policies.
+- `yaaif_governance_preview`: prepare up to 20 typed operations, with one operation per target. Store the immutable owner-bound proposal under the client's private `governance-proposals` directory. Return before/requested values, field diffs, validation results, baseline, review digest and rollback guidance. Presets resolve into a concrete policy update before review. Harness validation uses the backend's update normalizer. Lifecycle commands explicitly report that derived effects are verified at apply rather than simulated.
+- `yaaif_governance_apply`: requires proposal ID, review digest and `confirm=true` after the user reviews that proposal. Recheck access before every step, serialize application with an exclusive proposal lock, and send backend preconditions. Applied operations never replay. A lost response records an `uncertain` step and stops; inspect current state before proposing a remedy.
+- `yaaif_governance_proposal_get`: retrieve status and verification within the original identity/profile/platform/tenant boundary and current permissions. Interrupted `applying` proposals require inspection; do not delete their lock file while another process might still be running.
+
+Backend additions include policy/harness validation, single-record reads and `GET /api/{guardrails,harness,agents}/governance-state`. Conditional management writes send `X-Governance-If-Match` and return `X-Governance-Version`; existing policy/exception `If-Match` checks are forwarded too. API-server forwards governance preconditions and correlation headers. Management HTTP writes serialize per tenant across PostgreSQL replicas with advisory locks; the pool must permit at least two connections. Busy requests fail without applying. Fingerprints include persisted configuration, assignments and evaluation feedback, so unrelated changes within that tenant may conservatively require another preview. Direct background/database writers do not take the HTTP management lock; existing resource-level validation and version checks still apply.
+
+Audit records use authenticated actor identity, proposal/request correlation, requested field names, body digest and outcome. Full before snapshots remain in private client state and existing policy revision storage. Read-back reports saved settings separately from runtime enforcement. Applying configuration does not prove that a representative workload passed.
+
+Prepared versions: bridge **1.3.8**, Cursor/Codex/Claude plugins **1.3.3**, VS Code/JetBrains **0.2.0**. Publish the bridge before installing plugin configurations that reference its new npm pin. No release is published by building this checkout.
+
+For isolated MCP transport smoke tests after building:
+
+```bash
+YAAIF_GOVERNANCE_SMOKE=1 node --import tsx --test src/integration/governanceBridge.integration.test.ts
+```
+
+These six-client tests use fresh unauthenticated state. Signed-in tenant and native IDE interaction smoke tests remain release checks.

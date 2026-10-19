@@ -1,3 +1,4 @@
+import { registerGovernanceTools } from "./registerGovernance.js";
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
 import { appendClampedLimit, clampCatalogLimit } from "../lib/catalogLimits.js";
@@ -14,6 +15,7 @@ import { registerDoctorTools } from "./registerDoctor.js";
 import { registerDocsTools } from "./registerDocs.js";
 import { registerLocalTools } from "./registerLocalTools.js";
 import { registerFileTools } from "./registerFiles.js";
+import { registerFileWorkflowTools } from "./registerFileWorkflows.js";
 import { registerOpsSupportTools } from "./registerOpsSupport.js";
 import { registerApiKeyTools } from "./registerApiKeys.js";
 import { registerMcpDeploymentTools } from "./registerMcpDeployments.js";
@@ -24,6 +26,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 export function registerAllTools(server, ctx) {
     registerAuthTools(server, ctx);
+    registerGovernanceTools(server, ctx);
     registerSkills(server, ctx);
     registerAmbient(server, ctx);
     registerMcp(server, ctx);
@@ -39,6 +42,7 @@ export function registerAllTools(server, ctx) {
     registerOpsSupportTools(server, ctx);
     registerLocalTools(server, ctx);
     registerFileTools(server, ctx);
+    registerFileWorkflowTools(server, ctx);
     registerDoctorTools(server, ctx);
     registerDocsTools(server, ctx);
 }
@@ -789,6 +793,39 @@ function registerMcp(server, ctx) {
             return ok("Fetched MCP tool.", {
                 tool: await ctx.api.agentJSON("GET", `/api/mcp-tools/${encodeURIComponent(tool_id)}`),
             });
+        }
+        catch (e) {
+            return fail(String(e));
+        }
+    });
+    server.registerTool("yaaif_mcp_tool_set_enabled", {
+        description: "Enable or disable registered MCP catalog tools without redeploying or re-probing the server. Pass tool_names and/or tool_ids. Optional server_id limits the match to one server. Disabled tools stay registered and leave the agent catalog.",
+        inputSchema: {
+            enabled: z.boolean(),
+            tool_names: z.array(z.string()).optional(),
+            tool_ids: z.array(z.string()).optional(),
+            server_id: z.string().optional(),
+        },
+    }, async ({ enabled, tool_names, tool_ids, server_id }) => {
+        const names = (tool_names ?? []).map((name) => name.trim()).filter(Boolean);
+        const ids = (tool_ids ?? []).map((id) => id.trim()).filter(Boolean);
+        if (!names.length && !ids.length)
+            return fail("tool_names or tool_ids is required");
+        try {
+            const result = await ctx.api.agentJSON("POST", "/api/mcp-tools/enabled", {
+                enabled,
+                tool_names: names,
+                tool_ids: ids,
+                ...(server_id ? { server_id } : {}),
+            });
+            const updated = Array.isArray(result?.updated) ? result.updated.length : 0;
+            if (!updated)
+                return fail("No matching MCP tools.", { result });
+            const missing = Array.isArray(result?.missing) ? result.missing : [];
+            const summary = missing.length
+                ? `Set enabled=${enabled} on ${updated} MCP tool(s). Unmatched: ${missing.join(", ")}.`
+                : `Set enabled=${enabled} on ${updated} MCP tool(s).`;
+            return ok(summary, { result });
         }
         catch (e) {
             return fail(String(e));

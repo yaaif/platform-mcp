@@ -1,6 +1,11 @@
 /** Tools exposed to OpenCode. OpenAI-compatible models reject >128 tools total
  * (builtins + MCP). Keep this curated set well under that ceiling. */
 export const OPENCODE_TOOL_ALLOWLIST = [
+  "yaaif_governance_capabilities",
+  "yaaif_governance_inspect",
+  "yaaif_governance_preview",
+  "yaaif_governance_apply",
+  "yaaif_governance_proposal_get",
   // Auth / session
   "yaaif_platform_list",
   "yaaif_platform_use",

@@ -217,6 +217,8 @@ export type YaaifFetchInit = Omit<RequestInit, "body"> & {
   body?: RequestInit["body"] | Buffer;
   /** Extra attempts after a transient failure. Defaults to 2 for GET/HEAD and 0 otherwise. */
   retries?: number;
+  /** Disable even stale-socket retries for reviewed, non-repeatable mutations. */
+  retryStaleSocket?: boolean;
 };
 
 // One keep-alive agent per TLS material. A new agent per request repeats the
@@ -279,7 +281,7 @@ export async function yaaifFetch(input: string | URL, init: YaaifFetchInit = {})
     } catch (err) {
       const e = err as StaleSocketError;
       if (e.name === "AbortError" || init.signal?.aborted) throw err;
-      if (e.staleSocket && !staleRetried) {
+      if (e.staleSocket && !staleRetried && init.retryStaleSocket !== false) {
         staleRetried = true;
         attempt--;
         continue;

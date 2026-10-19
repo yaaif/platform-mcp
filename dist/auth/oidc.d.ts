@@ -1,5 +1,9 @@
 import type { Config } from "../config.js";
 import type { Session, SessionStore } from "./store.js";
+/** The identity provider refused the refresh token itself (invalid_grant, revoked, expired). */
+export declare class RefreshRejectedError extends Error {
+    constructor(message: string);
+}
 export declare class ReauthRequiredError extends Error {
     readonly code = "reauth_required";
     constructor(message: string);
@@ -54,5 +58,12 @@ export declare class AuthClient {
         token: string;
         session: Session;
     }>;
+    /**
+     * OpenCode runs tool calls in parallel, so several can find the token expired
+     * at once. Rotating refresh tokens only allow one use, so share one refresh.
+     */
+    private refreshing;
+    private refreshOnce;
+    private refreshOrRecover;
     private refresh;
 }

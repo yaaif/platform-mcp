@@ -38,6 +38,15 @@ export declare function getTlsResolveInfo(): TlsResolveInfo;
 export type YaaifFetchInit = Omit<RequestInit, "body"> & {
     timeoutMs?: number;
     body?: RequestInit["body"] | Buffer;
+    /** Extra attempts after a transient failure. Defaults to 2 for GET/HEAD and 0 otherwise. */
+    retries?: number;
+    /** Disable even stale-socket retries for reviewed, non-repeatable mutations. */
+    retryStaleSocket?: boolean;
 };
-/** fetch()-compatible helper that applies optional extra CA / client mTLS. */
+/**
+ * fetch()-compatible helper that applies optional extra CA / client mTLS.
+ * GET and HEAD retry briefly on gateway errors and connection resets, which is
+ * what a service restart looks like. A reused keep-alive socket that the server
+ * already closed is retried once for any method, because that request never ran.
+ */
 export declare function yaaifFetch(input: string | URL, init?: YaaifFetchInit): Promise<Response>;

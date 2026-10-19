@@ -3,7 +3,17 @@ import type { Config } from "../config.js";
 import { encodeMultipart } from "../lib/toolPackageInspect.js";
 import { yaaifFetch } from "./tls.js";
 
-export type ApiRequestOpts = { timeoutMs?: number };
+export type ApiRequestOpts = {
+  timeoutMs?: number;
+  headers?: Record<string, string>;
+  expectedContext?: {
+    subject: string;
+    tenant: string;
+    profile: string;
+    origin: string;
+  };
+  onResponse?: (response: Response) => void;
+};
 
 export type ApiFormFile = {
   field?: string;
@@ -39,24 +49,54 @@ export class ApiClient {
     private readonly auth: AuthClient,
   ) {}
 
-  agentJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+  agentJSON<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
     return this.doJSON<T>(this.cfg.agentBaseUrl, method, path, body, opts);
   }
 
-  apiJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+  apiJSON<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
     return this.doJSON<T>(this.cfg.apiBaseUrl, method, path, body, opts);
   }
 
-  controlPlaneJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
-    return this.doJSON<T>(this.cfg.controlPlaneBaseUrl, method, path, body, opts);
+  controlPlaneJSON<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
+    return this.doJSON<T>(
+      this.cfg.controlPlaneBaseUrl,
+      method,
+      path,
+      body,
+      opts,
+    );
   }
 
-  approvalJSON<T = unknown>(method: string, path: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+  approvalJSON<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
     return this.doJSON<T>(this.cfg.approvalBaseUrl, method, path, body, opts);
   }
 
   /** Product docs are public. No bearer token or tenant header. */
-  docsJSON<T = unknown>(method: string, path: string, opts?: ApiRequestOpts): Promise<T> {
+  docsJSON<T = unknown>(
+    method: string,
+    path: string,
+    opts?: ApiRequestOpts,
+  ): Promise<T> {
     return this.doPublicJSON<T>(this.cfg.docsBaseUrl, method, path, opts);
   }
 
@@ -67,14 +107,42 @@ export class ApiClient {
     file: ApiFormFile,
     opts?: ApiRequestOpts,
   ): Promise<T> {
-    return this.doForm<T>(this.cfg.apiBaseUrl, method, path, fields, file, opts);
+    return this.doForm<T>(
+      this.cfg.apiBaseUrl,
+      method,
+      path,
+      fields,
+      file,
+      opts,
+    );
   }
 
-  private async authHeaders(path: string): Promise<Record<string, string>> {
+  private async authHeaders(
+    path: string,
+    expected?: ApiRequestOpts["expectedContext"],
+  ): Promise<Record<string, string>> {
     const { token, session } = await this.auth.accessToken();
-    const tenantId = (session.tenant_id || this.cfg.defaultTenantId || "").trim();
+    const tenantId = (
+      session.tenant_id ||
+      this.cfg.defaultTenantId ||
+      ""
+    ).trim();
+    if (
+      expected &&
+      (session.subject !== expected.subject ||
+        tenantId !== expected.tenant ||
+        (this.cfg.activeProfileId || session.profile_id || "default") !==
+          expected.profile ||
+        `${this.cfg.apiBaseUrl}|${this.cfg.agentBaseUrl}` !== expected.origin)
+    ) {
+      throw new Error(
+        "Governance identity, tenant, profile or platform changed before request dispatch",
+      );
+    }
     if (!tenantId && !isTenantBootstrapPath(path)) {
-      throw new Error("tenant not set; call yaaif_set_tenant (name/slug/uuid) or yaaif_ensure_session");
+      throw new Error(
+        "tenant not set; call yaaif_set_tenant (name/slug/uuid) or yaaif_ensure_session",
+      );
     }
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
@@ -90,11 +158,15 @@ export class ApiClient {
     path: string,
     opts?: ApiRequestOpts,
   ): Promise<T> {
-    return this.parseJSON<T>(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+    return this.parseJSON<T>(
       method,
-      headers: { Accept: "application/json" },
-      timeoutMs: opts?.timeoutMs,
-    }));
+      path,
+      await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+        method,
+        headers: { Accept: "application/json" },
+        timeoutMs: opts?.timeoutMs,
+      }),
+    );
   }
 
   private async doJSON<T>(
@@ -104,18 +176,28 @@ export class ApiClient {
     body?: unknown,
     opts?: ApiRequestOpts,
   ): Promise<T> {
-    const headers = await this.authHeaders(path);
+    const headers = await this.authHeaders(path, opts?.expectedContext);
     let payload: string | undefined;
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
       payload = JSON.stringify(body);
     }
-    return this.parseJSON<T>(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
-      method,
-      headers,
-      body: payload,
-      timeoutMs: opts?.timeoutMs,
-    }));
+    // Authentication and tenant headers cannot be overridden by request options.
+    const requestHeaders = new Headers(opts?.headers);
+    for (const [key, value] of Object.entries(headers))
+      requestHeaders.set(key, value);
+    const response = await yaaifFetch(
+      `${base}${path.startsWith("/") ? path : `/${path}`}`,
+      {
+        method,
+        headers: requestHeaders,
+        body: payload,
+        timeoutMs: opts?.timeoutMs,
+        retryStaleSocket: !requestHeaders.has("X-Governance-If-Match"),
+      },
+    );
+    opts?.onResponse?.(response);
+    return this.parseJSON<T>(method, path, response);
   }
 
   private async doForm<T>(
@@ -134,24 +216,36 @@ export class ApiClient {
       contentType: file.contentType,
     });
     headers["Content-Type"] = encoded.contentType;
-    return this.parseJSON<T>(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+    return this.parseJSON<T>(
       method,
-      headers,
-      body: encoded.buffer,
-      timeoutMs: opts?.timeoutMs ?? 5 * 60 * 1000,
-    }));
+      path,
+      await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+        method,
+        headers,
+        body: encoded.buffer,
+        timeoutMs: opts?.timeoutMs ?? 5 * 60 * 1000,
+      }),
+    );
   }
 
-  private async parseJSON<T>(method: string, path: string, res: Response): Promise<T> {
+  private async parseJSON<T>(
+    method: string,
+    path: string,
+    res: Response,
+  ): Promise<T> {
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`${method} ${path} failed (${res.status}): ${boundedErrorText(text)}`);
+      throw new Error(
+        `${method} ${path} failed (${res.status}): ${boundedErrorText(text)}`,
+      );
     }
     if (!text.trim() || res.status === 204) return undefined as T;
     try {
       return JSON.parse(text) as T;
     } catch {
-      throw new Error(`${method} ${path} returned a non-JSON response (${res.status}): ${boundedErrorText(text, 200)}`);
+      throw new Error(
+        `${method} ${path} returned a non-JSON response (${res.status}): ${boundedErrorText(text, 200)}`,
+      );
     }
   }
 }

@@ -46,7 +46,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: `yaaif-${cfg.client.id}`,
-    version: "1.2.0",
+    version: "1.3.8",
   });
   registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
 

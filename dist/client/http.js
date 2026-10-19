@@ -6,6 +6,17 @@ function isTenantBootstrapPath(path) {
         path.startsWith("/api/users/me/last-tenant") ||
         path.startsWith("/api/users/me/active-tenant"));
 }
+const MAX_ERROR_TEXT = 500;
+/**
+ * Error bodies go straight into the model's context. A gateway error page or a
+ * stack trace can be many kilobytes, so keep the start and say what was cut.
+ */
+export function boundedErrorText(text, max = MAX_ERROR_TEXT) {
+    const trimmed = text.trim();
+    if (trimmed.length <= max)
+        return trimmed;
+    return `${trimmed.slice(0, max)}… [truncated ${trimmed.length - max} chars]`;
+}
 export class ApiClient {
     cfg;
     auth;
@@ -32,9 +43,19 @@ export class ApiClient {
     apiForm(method, path, fields, file, opts) {
         return this.doForm(this.cfg.apiBaseUrl, method, path, fields, file, opts);
     }
-    async authHeaders(path) {
+    async authHeaders(path, expected) {
         const { token, session } = await this.auth.accessToken();
-        const tenantId = (session.tenant_id || this.cfg.defaultTenantId || "").trim();
+        const tenantId = (session.tenant_id ||
+            this.cfg.defaultTenantId ||
+            "").trim();
+        if (expected &&
+            (session.subject !== expected.subject ||
+                tenantId !== expected.tenant ||
+                (this.cfg.activeProfileId || session.profile_id || "default") !==
+                    expected.profile ||
+                `${this.cfg.apiBaseUrl}|${this.cfg.agentBaseUrl}` !== expected.origin)) {
+            throw new Error("Governance identity, tenant, profile or platform changed before request dispatch");
+        }
         if (!tenantId && !isTenantBootstrapPath(path)) {
             throw new Error("tenant not set; call yaaif_set_tenant (name/slug/uuid) or yaaif_ensure_session");
         }
@@ -54,18 +75,25 @@ export class ApiClient {
         }));
     }
     async doJSON(base, method, path, body, opts) {
-        const headers = await this.authHeaders(path);
+        const headers = await this.authHeaders(path, opts?.expectedContext);
         let payload;
         if (body !== undefined) {
             headers["Content-Type"] = "application/json";
             payload = JSON.stringify(body);
         }
-        return this.parseJSON(method, path, await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+        // Authentication and tenant headers cannot be overridden by request options.
+        const requestHeaders = new Headers(opts?.headers);
+        for (const [key, value] of Object.entries(headers))
+            requestHeaders.set(key, value);
+        const response = await yaaifFetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
             method,
-            headers,
+            headers: requestHeaders,
             body: payload,
             timeoutMs: opts?.timeoutMs,
-        }));
+            retryStaleSocket: !requestHeaders.has("X-Governance-If-Match"),
+        });
+        opts?.onResponse?.(response);
+        return this.parseJSON(method, path, response);
     }
     async doForm(base, method, path, fields, file, opts) {
         const headers = await this.authHeaders(path);
@@ -86,10 +114,15 @@ export class ApiClient {
     async parseJSON(method, path, res) {
         const text = await res.text();
         if (!res.ok) {
-            throw new Error(`${method} ${path} failed (${res.status}): ${text.trim()}`);
+            throw new Error(`${method} ${path} failed (${res.status}): ${boundedErrorText(text)}`);
         }
         if (!text.trim() || res.status === 204)
             return undefined;
-        return JSON.parse(text);
+        try {
+            return JSON.parse(text);
+        }
+        catch {
+            throw new Error(`${method} ${path} returned a non-JSON response (${res.status}): ${boundedErrorText(text, 200)}`);
+        }
     }
 }

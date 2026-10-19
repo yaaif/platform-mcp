@@ -43,7 +43,7 @@ async function main() {
     const telemetry = new TelemetryStore(cfg.stateHome);
     const server = new McpServer({
         name: `yaaif-${cfg.client.id}`,
-        version: "1.2.0",
+        version: "1.3.8",
     });
     registerAllTools(server, { cfg, auth, api, profiles, plans, telemetry });
     // A floating device-login poll must not terminate the stdio server. Node treats
