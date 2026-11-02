@@ -525,7 +525,8 @@ function registerAmbient(server: McpServer, ctx: Ctx): void {
   });
 
   server.registerTool("yaaif_ambient_test_trigger", {
-    description: "Fire a test signal against an ambient workflow.",
+    description:
+      "Fire a test signal against an ambient workflow. The run is attributed to the signed-in user unless user_id is given; only your own runs can use your ambient run-as credential grants.",
     inputSchema: {
       workflow_id: z.string(),
       event_type: z.string(),
@@ -533,15 +534,21 @@ function registerAmbient(server: McpServer, ctx: Ctx): void {
       entity_id: z.string(),
       source: z.string().optional(),
       payload: z.record(z.unknown()).optional(),
+      user_id: z.string().optional(),
     },
   }, async (args) => {
     try {
       const path = `/api/ambient/workflows/${encodeURIComponent(args.workflow_id)}/test-trigger`;
+      // Same default as the admin test-trigger panel: the signed-in user. The
+      // server verifies it against the token, so naming someone else only
+      // records them as an unverified user.
+      const userID = args.user_id?.trim() || (await ctx.auth.session())?.email?.trim() || undefined;
       const result = await ctx.api.agentJSON("POST", path, {
         source: args.source || "manual",
         event_type: args.event_type,
         entity_type: args.entity_type,
         entity_id: args.entity_id,
+        user_id: userID,
         payload: args.payload ?? {},
       });
       return ok("Triggered ambient workflow test.", { result });
