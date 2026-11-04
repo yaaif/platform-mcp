@@ -7,6 +7,31 @@ import type { Config } from "../config.js";
 import { renderLoginCallbackPage } from "./callbackPage.js";
 import type { Session, SessionStore, TokenSet } from "./store.js";
 
+/** Browser sign-in needs a browser on this machine; OpenCode runs on a server. */
+export class BrowserLoginUnavailableError extends Error {
+  constructor(label: string) {
+    super(`Browser sign-in is not available in ${label}. Call yaaif_login_device instead.`);
+    this.name = "BrowserLoginUnavailableError";
+  }
+}
+
+export function browserLoginAvailable(cfg: Pick<Config, "client">): boolean {
+  return cfg.client?.id !== "opencode";
+}
+
+/**
+ * Opens a URL in the local browser when there is one. A missing launcher
+ * (no xdg-open in a container) fails the spawn with an "error" event that
+ * would otherwise crash the MCP server.
+ */
+export function openInBrowser(url: string, onFail: (error: unknown) => void = () => {}): void {
+  void open(url)
+    .then((child) => {
+      child.on("error", onFail);
+    })
+    .catch(onFail);
+}
+
 /** The identity provider refused the refresh token itself (invalid_grant, revoked, expired). */
 export class RefreshRejectedError extends Error {
   constructor(message: string) {
@@ -131,6 +156,7 @@ export class AuthClient {
   }
 
   async login(): Promise<{ session: Session; auth_url: string }> {
+    if (!browserLoginAvailable(this.cfg)) throw new BrowserLoginUnavailableError(this.cfg.client.label);
     await this.store.ensureHome(this.cfg.stateHome);
     const verifier = b64url(randomBytes(32));
     const challenge = b64url(createHash("sha256").update(verifier).digest());
@@ -222,7 +248,7 @@ export class AuthClient {
         server.close();
       });
 
-      void open(authUrlStr).catch((e) => {
+      openInBrowser(authUrlStr, (e) => {
         // Keep listening — user can open the URL manually.
         console.error(`Failed to open browser (${String(e)}). Open this URL: ${authUrlStr}`);
       });
@@ -304,9 +330,12 @@ export class AuthClient {
     const deadline = Date.now() + timeoutMs;
 
     if (verificationUri) {
-      void open(verificationUri).catch(() => {
-        console.error(`Complete device login at: ${verificationUri} code=${userCode}`);
-      });
+      // Server-side clients show the URL and code to the user instead.
+      if (browserLoginAvailable(this.cfg)) {
+        openInBrowser(verificationUri, () => {
+          console.error(`Complete device login at: ${verificationUri} code=${userCode}`);
+        });
+      }
     }
 
     const pending: DevicePending = {
@@ -440,7 +469,7 @@ export class AuthClient {
       const u = new URL(`${sess.oidc_authority}/protocol/openid-connect/logout`);
       u.searchParams.set("id_token_hint", sess.tokens.id_token);
       end_session_url = u.toString();
-      void open(end_session_url).catch(() => { /* optional */ });
+      if (browserLoginAvailable(this.cfg)) openInBrowser(end_session_url);
     }
     await this.store.clear();
     return { logged_out: true, end_session_url };

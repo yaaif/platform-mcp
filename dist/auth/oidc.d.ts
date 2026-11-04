@@ -1,5 +1,16 @@
 import type { Config } from "../config.js";
 import type { Session, SessionStore } from "./store.js";
+/** Browser sign-in needs a browser on this machine; OpenCode runs on a server. */
+export declare class BrowserLoginUnavailableError extends Error {
+    constructor(label: string);
+}
+export declare function browserLoginAvailable(cfg: Pick<Config, "client">): boolean;
+/**
+ * Opens a URL in the local browser when there is one. A missing launcher
+ * (no xdg-open in a container) fails the spawn with an "error" event that
+ * would otherwise crash the MCP server.
+ */
+export declare function openInBrowser(url: string, onFail?: (error: unknown) => void): void;
 /** The identity provider refused the refresh token itself (invalid_grant, revoked, expired). */
 export declare class RefreshRejectedError extends Error {
     constructor(message: string);

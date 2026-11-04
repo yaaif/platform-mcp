@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { browserLoginAvailable } from "../auth/oidc.js";
 import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
@@ -91,6 +92,8 @@ export function registerDoctorTools(server, ctx) {
                 if (!sess?.tokens.access_token) {
                     if (!login_if_needed)
                         return { ready: false, reason: "not_authenticated" };
+                    if (!browserLoginAvailable(ctx.cfg))
+                        return { ready: false, reason: "device_login_required", login_tool: "yaaif_login_device" };
                     await ctx.auth.login();
                 }
                 else {

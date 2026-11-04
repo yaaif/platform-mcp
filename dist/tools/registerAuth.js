@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { IssuerMismatchError, ReauthRequiredError } from "../auth/oidc.js";
+import { browserLoginAvailable, IssuerMismatchError, ReauthRequiredError } from "../auth/oidc.js";
 import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { exportProfileEnv } from "../lib/profileExport.js";
 import { applyProfileToConfig, inferProfileId, } from "../platform/profiles.js";
@@ -103,6 +103,17 @@ async function autoSelectTenant(ctx) {
         session: sess,
         activated,
     };
+}
+// OpenCode runs on a server: browser sign-in cannot finish there, so the
+// model is told to run the device login (it shows the user a URL and code).
+function deviceLoginRequired(ctx, oidc) {
+    return ok("Session not ready — call yaaif_login_device and show the user the verification URL and code.", {
+        ready: false,
+        reauth_required: true,
+        login_tool: "yaaif_login_device",
+        profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+        oidc,
+    });
 }
 function errPayload(e) {
     if (e instanceof ReauthRequiredError) {
@@ -560,6 +571,8 @@ export function registerAuthTools(server, ctx) {
                         oidc,
                     });
                 }
+                if (!browserLoginAvailable(ctx.cfg))
+                    return deviceLoginRequired(ctx, oidc);
                 const login = await ctx.auth.login();
                 logged_in = true;
                 auth_url = login.auth_url;
@@ -571,6 +584,8 @@ export function registerAuthTools(server, ctx) {
                 }
                 catch (e) {
                     if (login_if_needed) {
+                        if (!browserLoginAvailable(ctx.cfg))
+                            return deviceLoginRequired(ctx, oidc);
                         const login = await ctx.auth.login();
                         logged_in = true;
                         auth_url = login.auth_url;
