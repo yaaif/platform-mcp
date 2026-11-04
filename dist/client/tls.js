@@ -288,7 +288,15 @@ async function yaaifFetchOnce(input, init) {
                         continue;
                     rh.set(k, Array.isArray(v) ? v.join(", ") : String(v));
                 }
-                resolve(new Response(buf, { status: res.statusCode ?? 0, headers: rh }));
+                const status = res.statusCode ?? 0;
+                // Response rejects any body (even empty) for 101/204/205/304.
+                const body = [101, 204, 205, 304].includes(status) ? null : buf;
+                try {
+                    resolve(new Response(body, { status, headers: rh }));
+                }
+                catch (err) {
+                    reject(err);
+                }
             });
         });
         req.on("error", (err) => {

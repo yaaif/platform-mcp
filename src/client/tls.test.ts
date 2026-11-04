@@ -9,7 +9,10 @@ import {
   discoverMkcertCaCandidates,
   installTlsDispatcher,
   resolveCaFile,
+  yaaifFetch,
 } from "./tls.js";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 
 function baseCfg(over: Partial<Config> = {}): Config {
   return {
@@ -124,6 +127,22 @@ test("installTlsDispatcher loads auto mkcert CA into agent material", () => {
     else process.env.YAAIF_EXTRA_CA_FILE = prevExtra;
     if (prevNode === undefined) delete process.env.NODE_EXTRA_CA_CERTS;
     else process.env.NODE_EXTRA_CA_CERTS = prevNode;
+  }
+});
+
+test("yaaifFetch resolves 204 No Content responses", async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(204);
+    res.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const res = await yaaifFetch(`http://127.0.0.1:${port}/api/mcp-tools/t1`, { method: "DELETE" });
+    assert.equal(res.status, 204);
+    assert.equal(await res.text(), "");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
 

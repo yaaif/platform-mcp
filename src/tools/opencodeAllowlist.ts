@@ -57,6 +57,9 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_ambient_workflow_create",
   "yaaif_ambient_workflow_update",
   "yaaif_ambient_test_trigger",
+  "yaaif_ambient_schedule_create",
+  "yaaif_ambient_schedules_list",
+  "yaaif_ambient_schedule_set_enabled",
   // File workflows (file.ready / file.failed / file.review_decided)
   "yaaif_file_workflow_template",
   "yaaif_file_workflow_create",
@@ -73,6 +76,7 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_mcp_tools_list",
   "yaaif_mcp_tool_get",
   "yaaif_mcp_tool_set_enabled",
+  "yaaif_mcp_tool_delete",
   "yaaif_mcp_server_refresh",
   // MCP deployments
   "yaaif_deployment_settings_get",

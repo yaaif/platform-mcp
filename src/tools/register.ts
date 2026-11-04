@@ -22,6 +22,7 @@ import { registerOpsSupportTools } from "./registerOpsSupport.js";
 import { registerApiKeyTools } from "./registerApiKeys.js";
 import { registerMcpDeploymentTools } from "./registerMcpDeployments.js";
 import { registerUserTools } from "./registerUsers.js";
+import { registerCredentialTools } from "./registerCredentials.js";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,6 +39,7 @@ export function registerAllTools(server: McpServer, ctx: Ctx): void {
   registerMcpDeploymentTools(server, ctx);
   registerApiKeyTools(server, ctx);
   registerUserTools(server, ctx);
+  registerCredentialTools(server, ctx);
   registerDesktopTools(server, ctx);
   registerDesktopPackageTools(server, ctx);
   registerApprovalTools(server, ctx);
@@ -555,6 +557,63 @@ function registerAmbient(server: McpServer, ctx: Ctx): void {
     } catch (e) { return fail(String(e)); }
   });
 
+  server.registerTool("yaaif_ambient_schedule_create", {
+    description:
+      "Create a cron schedule that starts an ambient workflow (trigger kind schedule). The fired signal uses signal_event_type / signal_entity_type / signal_entity_id, so they must match one of the workflow's trigger rules. Use enabled=false to stage it.",
+    inputSchema: {
+      workflow_id: z.string(),
+      name: z.string(),
+      cron_expr: z.string(),
+      timezone: z.string().optional(),
+      signal_event_type: z.string(),
+      signal_entity_type: z.string(),
+      signal_entity_id: z.string().optional(),
+      input_vars: z.record(z.unknown()).optional(),
+      enabled: z.boolean().optional(),
+    },
+  }, async (args) => {
+    try {
+      const trigger = await ctx.api.agentJSON("POST", "/api/triggers", {
+        target_type: "ambient_workflow",
+        target_id: args.workflow_id,
+        kind: "schedule",
+        name: args.name,
+        enabled: args.enabled ?? true,
+        config: {
+          cron_expr: args.cron_expr,
+          ...(args.timezone ? { timezone: args.timezone } : {}),
+          signal_source: "schedule",
+          signal_event_type: args.signal_event_type,
+          signal_entity_type: args.signal_entity_type,
+          ...(args.signal_entity_id ? { signal_entity_id: args.signal_entity_id } : {}),
+          ...(args.input_vars ? { input_vars: args.input_vars } : {}),
+        },
+      });
+      return ok(`Created schedule ${args.name}.`, { trigger });
+    } catch (e) { return fail(String(e)); }
+  });
+
+  server.registerTool("yaaif_ambient_schedules_list", {
+    description: "List schedule and other triggers that start an ambient workflow.",
+    inputSchema: { workflow_id: z.string().optional() },
+  }, async ({ workflow_id }) => {
+    const params = new URLSearchParams({ target_type: "ambient_workflow" });
+    if (workflow_id) params.set("target_id", workflow_id);
+    try {
+      return ok("Listed workflow triggers.", { result: await ctx.api.agentJSON("GET", `/api/triggers?${params}`) });
+    } catch (e) { return fail(String(e)); }
+  });
+
+  server.registerTool("yaaif_ambient_schedule_set_enabled", {
+    description: "Enable or disable one workflow trigger (for example a schedule) by trigger id.",
+    inputSchema: { trigger_id: z.string(), enabled: z.boolean() },
+  }, async ({ trigger_id, enabled }) => {
+    try {
+      const trigger = await ctx.api.agentJSON("PATCH", `/api/triggers/${encodeURIComponent(trigger_id)}`, { enabled });
+      return ok(`Set enabled=${enabled} on trigger ${trigger_id}.`, { trigger });
+    } catch (e) { return fail(String(e)); }
+  });
+
   server.registerTool("yaaif_ambient_runs_list", {
     description: "List ambient workflow runs.",
     inputSchema: {
@@ -754,6 +813,19 @@ function registerMcp(server: McpServer, ctx: Ctx): void {
         ? `Set enabled=${enabled} on ${updated} MCP tool(s). Unmatched: ${missing.join(", ")}.`
         : `Set enabled=${enabled} on ${updated} MCP tool(s).`;
       return ok(summary, { result });
+    } catch (e) { return fail(String(e)); }
+  });
+
+  server.registerTool("yaaif_mcp_tool_delete", {
+    description:
+      "Delete one registered MCP catalog tool by id. The server and its other tools stay registered; re-link with yaaif_mcp_link_or_create.",
+    inputSchema: { tool_id: z.string() },
+  }, async ({ tool_id }) => {
+    const id = tool_id.trim();
+    if (!id) return fail("tool_id is required");
+    try {
+      await ctx.api.agentJSON("DELETE", `/api/mcp-tools/${encodeURIComponent(id)}`);
+      return ok(`Deleted MCP tool ${id}.`, { tool_id: id });
     } catch (e) { return fail(String(e)); }
   });
 
