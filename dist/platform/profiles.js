@@ -158,6 +158,19 @@ export class ProfileStore {
         await this.saveCustom(next);
         return cleaned;
     }
+    async cloneCustom(sourceId, destinationId, label) {
+        const source = await this.get(sourceId);
+        if (!source)
+            throw new Error(`unknown source profile: ${sourceId}`);
+        if (await this.get(destinationId))
+            throw new Error(`destination profile already exists: ${destinationId}`);
+        return await this.upsertCustom({
+            ...source,
+            id: destinationId,
+            label: label?.trim() || `${source.label} (copy)`,
+            builtin: false,
+        });
+    }
     async deleteCustom(profileId) {
         const id = profileId.trim().toLowerCase();
         const existing = await this.listCustom();

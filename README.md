@@ -2,9 +2,52 @@
 
 Stdio MCP bridge and Node installer for the YAAIF **Cursor**, **VS Code**, **IntelliJ IDEA**, **Claude Code**, **Codex**, and **OpenCode** plugins.
 
-Plugin contract **1.4.0**. This package **1.3.7**. Each IDE keeps its own login state and OIDC client.
+Plugin contract **1.7.0**. This package **1.7.0**. Each IDE keeps its own login state and OIDC client.
 
 `--install` writes the platform profile and (for Cursor) copies plugin files. It does **not** register the plugin in the IDE. Finish in Cursor / Claude / Codex after the CLI exits.
+
+## YAAIF terminal CLI
+
+The same package installs `yaaif`, a terminal/CI client with separate state in `~/.yaaif/cli` and the public `yaaif-cli` OIDC client. It does not replace `yaaifctl` or `yaaif-demo` host lifecycle commands.
+
+```bash
+npm install -g @yaaif/platform-mcp@1.7.0
+yaaif setup --yaaif-url https://platform.yaaif.local --device
+yaaif tenant list
+yaaif doctor --json
+yaaif features --json
+yaaif agents list --limit 10
+yaaif wiki search "release policy" --scope common
+yaaif wiki rebuilds latest
+yaaif updates status
+yaaif updates jobs list --limit 5
+yaaif tools list credential
+yaaif tools describe yaaif_credential_create
+yaaif tools call yaaif_credential_list --args '{}'
+```
+
+`yaaif tools call` invokes the exact registered MCP tools and schemas used by every IDE. Use `--args @request.json` or `--args -` for secret-bearing arguments instead of placing values in shell history. Common read-only resource commands are conveniences over those same tools.
+
+Default text output is unchanged. Add `--table` for compact tables from feature maps, catalog items, doctor checks and scalar statuses, or `--json` for stable automation output; the two options are mutually exclusive.
+
+Enable shell completion:
+
+```bash
+# Bash
+source <(yaaif completion bash)
+# Zsh
+source <(yaaif completion zsh)
+# Fish
+yaaif completion fish | source
+```
+
+Wiki tools cover pages, graph, Common status, proposals and rebuild inspection. Platform-update tools cover current status and release jobs. Both families are read-only: page/proposal decisions, rebuild start/cancel, release checks, job cancellation and upgrades remain in their authorized Admin UI or installer surfaces. OpenCode exposes a bounded subset of these reads to respect its tool budget.
+
+`yaaif_features` probes agents, Scenarios, Credentials, Wiki and platform updates with GET-only requests. `available` means the route and caller access work, `permission_denied` means the backend supports the feature but the caller lacks its named permission, `unavailable` means the backend needs an upgrade, and `error` indicates a transport/service failure. Doctor includes the same `feature_*` checks.
+
+Plugin lifecycle commands are `yaaif plugins list`, `check`, `install`, and `update`. Use `--plugin-src` for a source override or offline install; marketplace-managed IDEs report their native update action. `plugins check --online` additionally compares npm metadata, while offline checks inspect local manifests and launch commands.
+
+For an existing platform, provision the CLI's PKCE/device-grant client with `scripts/keycloak/ensure-yaaif-ide-client.sh cli`. Fresh realm imports already include it.
 
 | IDE | Plugin repo | Marketplace | Plugin ID | State directory | OIDC client |
 | --- | --- | --- | --- | --- | --- |
@@ -19,8 +62,10 @@ Install these on the **same OS** as the IDE (do not mix WSL Node with Windows Cu
 | Dependency | Requirement | Who |
 | --- | --- | --- |
 | **Node.js** | ≥ 20 (`node -v`). Provides `npx`. | All |
-| **npm package** | `@yaaif/platform-mcp@1.3.7` must be **Published** (`npm view @yaaif/platform-mcp version`) | All |
-| **Git** | Clone Cursor plugin; Claude/Codex marketplace add clones GitHub | Cursor always; Claude/Codex marketplace |
+| **npm package** | `@yaaif/platform-mcp@1.7.0` must be **Published** (`npm view @yaaif/platform-mcp version`) | All |
+| **Git** | Optional local development checkout or marketplace source | Optional; npx downloads tagged sources automatically |
+| **Java** | 21+ for the IntelliJ build; Gradle wrapper is included | IntelliJ only |
+| **`code` CLI** | Installs the generated VSIX; otherwise use the printed manual path | VS Code optional |
 | **Browser** | OIDC PKCE sign-in | All |
 | **Cursor Desktop** | Plugins + MCP | Cursor |
 | **Claude Code** | Desktop and/or `claude` CLI | Claude |
@@ -40,27 +85,35 @@ cd ~
 
 ## Shared installer
 
-The CLI asks you to choose hosted `https://platform.yaaif.ai` or another YAAIF URL.
+The CLI asks you to choose hosted `https://platform.yaaif.ai` or another YAAIF URL. Cursor, Claude Code, Codex, VS Code, and IntelliJ automatically download the plugin source tagged `v1.7.0`, matching the platform and bridge versions. VS Code builds/installs a VSIX; IntelliJ builds/installs a jar with its bundled Gradle wrapper.
 
 ```bash
-npx -y @yaaif/platform-mcp@1.3.7 --install --client cursor|vscode|intellij|claude|codex|opencode
+npx -y @yaaif/platform-mcp@1.7.0 --install --client cursor|vscode|intellij|claude|codex|opencode
 ```
 
 Non-interactive:
 
 ```bash
-npx -y @yaaif/platform-mcp@1.3.7 --install --client claude --yaaif-url https://your.yaaif.host
-npx -y @yaaif/platform-mcp@1.3.7 --install --client cursor --profile hosted --plugin-src ./cursor-plugin
+npx -y @yaaif/platform-mcp@1.7.0 --install --client claude --yaaif-url https://your.yaaif.host
+npx -y @yaaif/platform-mcp@1.7.0 --install --client cursor --profile hosted
 ```
 
-`--no-login` skips the browser. `--offline` pins absolute `node` + `cli.js` for Claude/Codex (Cursor always uses absolute `node` + `cli.js`). `--force` overwrites a newer Cursor dest. `--cli-path` is required if the running CLI lives under an `npx` cache.
+`--no-login` skips the browser. The installer stages the self-contained bridge under `~/.yaaif/<client>/bridge/`, so Cursor does not pin a temporary npx-cache path and `--cli-path` is only an optional override. Claude/Codex managed sources stay under `~/.yaaif/<client>/plugin/` for native local registration.
+
+Source controls: `--plugin-src DIR` uses a local checkout without downloading; `--plugin-ref REF` selects another tag/branch/commit; `--plugin-sha256 HEX` verifies the archive; `--plugin-source-base-url URL` selects an enterprise mirror. `--offline` requires `--plugin-src` and uses absolute `node` + staged bridge. `--force` overwrites a newer Cursor destination. Native controls: `--build-only` skips IDE installation and cleanup, `--code-path` overrides the VS Code CLI, `--gradle-path` overrides the IntelliJ wrapper, and `--jetbrains-plugins-dir` selects the IntelliJ installation target.
+
+After a successful update, superseded Cursor staging directories, Claude/Codex version caches, VSIX artifacts, and IntelliJ backup jars are removed from their active locations and moved to `~/.yaaif/<client>/plugin-backups/plugin-cleanup-*`. The current version and unrelated plugins are preserved. Use `--keep-old-versions` to retain old installations instead. Cleanup runs only after install verification succeeds.
+
+Updates are transactional: if installation or verification fails, the installer restores the previous plugin files, MCP launcher configuration, managed source, VSIX, and IntelliJ jar where backups exist, rather than leaving a partially upgraded installation. Rollback errors are reported without hiding the original failure.
+
+Use `--dry-run` with `plugins install` or `plugins update` to print the current/target versions, source, launcher, build/install actions, and cleanup policy as JSON. Dry-run returns before downloads, profile writes, builds, cleanup, or IDE installation.
 
 ### Air-gap
 
-On a machine with npm: `npm pack @yaaif/platform-mcp@1.3.7`. Copy the `.tgz` plus the plugin clone.
+On a machine with npm: `npm pack @yaaif/platform-mcp@1.7.0`. Copy the `.tgz` plus the plugin clone.
 
 ```bash
-npm install -g ./yaaif-platform-mcp-1.3.7.tgz
+npm install -g ./yaaif-platform-mcp-1.7.0.tgz
 yaaif-platform-mcp --install --client cursor|claude|codex --plugin-src <dir> --offline
 ```
 
@@ -72,8 +125,7 @@ yaaif-platform-mcp --install --client cursor|claude|codex --plugin-src <dir> --o
 
    ```bash
    cd ~
-   git clone https://github.com/yaaif/cursor-plugin.git
-   npx -y @yaaif/platform-mcp@1.3.7 --install --client cursor --plugin-src ./cursor-plugin
+   npx -y @yaaif/platform-mcp@1.7.0 --install --client cursor
    ```
 
    Choose hosted or your YAAIF URL and complete browser login.
@@ -92,11 +144,11 @@ Marketplace alternative (when published): install **yaaif** from Cursor Marketpl
 
 ## Claude Code — end to end
 
-1. **Sign in** (does not add the plugin)
+1. **Install profile and managed plugin source**
 
    ```bash
    cd ~
-   npx -y @yaaif/platform-mcp@1.3.7 --install --client claude
+   npx -y @yaaif/platform-mcp@1.7.0 --install --client claude
    ```
 
 2. **Add marketplace and install plugin (required)**
@@ -108,36 +160,52 @@ Marketplace alternative (when published): install **yaaif** from Cursor Marketpl
 
    Or **Customize → Plugins → Add** → GitHub `yaaif/claude-plugin` → install **`yaaif-platform`**. Do not search for `yaaif/yaaif-platform`.
 
-   Local only: `claude plugin marketplace add /path/to/claude-plugin` or `claude --plugin-dir /path/to/claude-plugin`.
+   Managed local source: `claude --plugin-dir ~/.yaaif/claude/plugin` or add that directory as a local marketplace.
 
 3. **New session**  
    Quit Claude Code, open a new session, optionally `/plugin configure yaaif-platform@yaaif`, then `/yaaif-platform:yaaif-login` and `/yaaif-platform:yaaif-doctor`.
 
-MCP start command: `npx -y @yaaif/platform-mcp@1.3.7 --client claude`.
+MCP start command: `npx -y @yaaif/platform-mcp@1.7.0 --client claude`.
 
 ---
 
 ## Codex — end to end
 
-1. **Sign in** (does not add the plugin)
+1. **Install profile and managed plugin source**
 
    ```bash
    cd ~
-   npx -y @yaaif/platform-mcp@1.3.7 --install --client codex
+   npx -y @yaaif/platform-mcp@1.7.0 --install --client codex
    ```
 
 2. **Add marketplace and install plugin (required)**
 
-   ```bash
-   git clone https://github.com/yaaif/codex-plugin.git
-   ```
-
-   In Codex, add the clone as a local marketplace named **`yaaif`**, install **YAAIF** (`yaaif-platform`), then start a **new** task.
+   In Codex, add `~/.yaaif/codex/plugin` as a local marketplace named **`yaaif`**, install **YAAIF** (`yaaif-platform`), then start a **new** task.
 
 3. **Verify**  
    `$yaaif-login` then `$yaaif-doctor`. Codex has no `userConfig` and no `commands/`; short names are alias skills.
 
-MCP start command: `npx -y @yaaif/platform-mcp@1.3.7 --client codex`.
+MCP start command: `npx -y @yaaif/platform-mcp@1.7.0 --client codex`.
+
+---
+
+## VS Code — native install
+
+```bash
+npx -y @yaaif/platform-mcp@1.7.0 --install --client vscode
+```
+
+The installer downloads the matching source, runs `npm ci` and `npm run package`, and calls `code --install-extension` on the generated VSIX. If `code` is unavailable, install the printed path under `~/.yaaif/vscode/packages/` manually or set `--code-path`. Use `--build-only` to skip IDE modification, then reload VS Code and run **YAAIF: Configure MCP Bridge**.
+
+## IntelliJ IDEA — native install
+
+Requires Java 21 or later; no system Gradle is needed because the plugin includes its wrapper.
+
+```bash
+npx -y @yaaif/platform-mcp@1.7.0 --install --client intellij
+```
+
+The installer builds `yaaif-jetbrains-1.7.0-base.jar`, backs up any previous `yaaif-jetbrains.jar`, and installs into the newest detected IntelliJ plugins directory. Set `--jetbrains-plugins-dir` for a different IDE or `--gradle-path` for another Gradle executable. Use `--build-only` to skip installation, then restart IntelliJ and run **YAAIF: Configure MCP Bridge**.
 
 ---
 
@@ -197,7 +265,21 @@ Cursor, Claude Code and Codex also ship the `yaaif-create-file-workflow` skill (
 | **`local`** | All APIs on `https://platform.yaaif.local` |
 | **`local-hybrid`** | OIDC on `.com` / tunnel, APIs on `.local` |
 
-Optional `YAAIF_EXTRA_CA_FILE` for a local/corporate CA. Tokens stay in `~/.yaaif/<ide>/session.json` (`0600`). Do not commit that directory.
+Optional `YAAIF_EXTRA_CA_FILE` for a local/corporate CA. Each server profile has an isolated session in `~/.yaaif/<ide>/profile-sessions/<profile-id>/session.json` (`0600`), with one-time migration from the legacy single `session.json`. Switching profiles restores that server's login and tenant when present and never reuses another server's token. Do not commit the state directory.
+
+`yaaif profile list` shows safe authentication and tenant status for every server. `yaaif profile clone SOURCE_ID DEST_ID` copies only endpoint/TLS configuration, not credentials. `yaaif copy scenario SPEC_ID --from SOURCE --to DEST` previews a cross-server draft copy; rerun with `--yes` after review. Conflicting slugs fail safely unless `--new-slug` is provided. Bindings, release history, provenance, tenant IDs, credentials, and tokens are excluded.
+
+Move configurations between machines with `yaaif profile export --out profiles.json` and `yaaif profile import profiles.json`. Import previews first; apply with `--yes` and optionally `--activate ID`. Bundles contain endpoint/TLS configuration only—never sessions, tokens, or secret contents—and refuse to overwrite existing profiles. MCP equivalents are `yaaif_platform_bundle_export` and `yaaif_platform_bundle_import`.
+
+Copy complete skill packs with `yaaif copy skill SKILL_ID --from SOURCE --to DEST`. The preview lists remapped files and excluded credential/private-key material. Apply with `--yes`; destination conflicts require `--new-id`. Agent mappings, Scenario bindings, and sessions are not copied. MCP equivalent: `yaaif_skill_copy`.
+
+Copy ambient workflows with `yaaif copy workflow WORKFLOW_ID --from SOURCE --to DEST`. The destination ambient agent must already exist (override with `--ambient-agent-id`). Graph logic is preserved, but server-specific credentials, approval strategy IDs, Scenario bindings, and run history are removed. New workflows are installed disabled with async execution and approval requirements off for review. MCP equivalent: `yaaif_ambient_workflow_copy`.
+
+Copy external MCP connections with `yaaif copy mcp-server SERVER_ID --from SOURCE --to DEST`. Only endpoint metadata and non-secret header mappings are copied. Credential IDs, profiles, mappings, literal headers, and tool refresh calls are excluded. The result lists required credential rebinding and `refresh_required: true`. Use `--new-name` or `--new-endpoint` to avoid conflicts. MCP equivalent: `yaaif_mcp_server_copy`.
+
+Copy agent definitions with `yaaif copy agent AGENT_ID --from SOURCE --to DEST`. Prompt, description, and agent type are preserved; skill mappings, Scenario bindings, and activation state are not. The destination agent is created disabled and lists required skill IDs for explicit remapping. MCP equivalent: `yaaif_agent_copy`.
+
+Migrate selected resources together with `yaaif copy catalog --from SOURCE --to DEST --mcp-servers IDS --skills IDS --agents IDS --ambient-agents IDS --workflows IDS --scenarios IDS`. The plan covers every selected resource and conflict before applying in dependency order: MCP connections, skills, agents, ambient agents, workflows, then Scenarios. Any conflict aborts before writes. Sessions, credentials, bindings, and run history are excluded. MCP equivalent: `yaaif_catalog_copy`.
 
 ## Local development
 
@@ -206,6 +288,7 @@ npm install
 npm test
 npm run build
 node dist/cli.js --client cursor
+node dist/yaaif-cli.js --help
 ```
 
 `--setup detect|profile|login|whoami|all` remains available after install.
@@ -234,7 +317,7 @@ Backend additions include policy/harness validation, single-record reads and `GE
 
 Audit records use authenticated actor identity, proposal/request correlation, requested field names, body digest and outcome. Full before snapshots remain in private client state and existing policy revision storage. Read-back reports saved settings separately from runtime enforcement. Applying configuration does not prove that a representative workload passed.
 
-Prepared versions: bridge **1.3.8**, Cursor/Codex/Claude plugins **1.3.3**, VS Code/JetBrains **0.2.0**. Publish the bridge before installing plugin configurations that reference its new npm pin. No release is published by building this checkout.
+Prepared versions: bridge **1.7.0**, Cursor/Codex/Claude plugins **1.7.0**, VS Code/JetBrains **1.7.0**. Publish the bridge before installing plugin configurations that reference its new npm pin. No release is published by building this checkout.
 
 For isolated MCP transport smoke tests after building:
 

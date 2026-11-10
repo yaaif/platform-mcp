@@ -1,4 +1,7 @@
 import { registerGovernanceTools } from "./registerGovernance.js";
+import { registerWikiTools } from "./registerWiki.js";
+import { registerPlatformUpdateTools } from "./registerPlatformUpdates.js";
+import { registerMigrationTools } from "./registerMigration.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { fail, ok } from "./helpers.js";
@@ -33,6 +36,9 @@ export type { Ctx } from "./ctx.js";
 export function registerAllTools(server: McpServer, ctx: Ctx): void {
   registerAuthTools(server, ctx);
   registerGovernanceTools(server, ctx);
+  registerWikiTools(server, ctx);
+  registerPlatformUpdateTools(server, ctx);
+  registerMigrationTools(server, ctx);
   registerSkills(server, ctx);
   registerAmbient(server, ctx);
   registerMcp(server, ctx);

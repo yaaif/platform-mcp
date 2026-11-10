@@ -2,10 +2,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude" | "opencode";
+export type ClientId = BridgeClient | "cli";
 
-export type ClientDescriptor = {
-  id: BridgeClient;
-  label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code" | "OpenCode";
+export type ClientDescriptor<I extends ClientId = ClientId> = {
+  id: I;
+  label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code" | "OpenCode" | "YAAIF CLI";
   oidcClientId: string;
   stateHomeEnv: string;
   stateHomeSuffix: string;
@@ -36,7 +37,7 @@ export function opencodeStateHome(subject: string): string {
   return join(opencodeStateRoot(), subject);
 }
 
-const CLIENTS: Record<BridgeClient, ClientDescriptor> = {
+const CLIENTS: Record<BridgeClient, ClientDescriptor<BridgeClient>> = {
   cursor: {
     id: "cursor",
     label: "Cursor",
@@ -87,6 +88,15 @@ const CLIENTS: Record<BridgeClient, ClientDescriptor> = {
   },
 };
 
+export const CLI_CLIENT: ClientDescriptor = {
+  id: "cli",
+  label: "YAAIF CLI",
+  oidcClientId: "yaaif-cli",
+  stateHomeEnv: "YAAIF_CLI_HOME",
+  stateHomeSuffix: "cli",
+  updatedBy: "yaaif-cli",
+};
+
 export type Config = {
   client: ClientDescriptor;
   oidcAuthority: string;
@@ -110,11 +120,11 @@ export type Config = {
   clientKeyFile: string;
 };
 
-export function clientDescriptor(client: BridgeClient): ClientDescriptor {
+export function clientDescriptor(client: BridgeClient): ClientDescriptor<BridgeClient> {
   return CLIENTS[client];
 }
 
-export function parseBridgeClient(argv = process.argv.slice(2)): ClientDescriptor {
+export function parseBridgeClient(argv = process.argv.slice(2)): ClientDescriptor<BridgeClient> {
   const values = argv
     .flatMap((arg, index) => {
       if (arg.startsWith("--client=")) return [arg.slice("--client=".length)];
@@ -159,7 +169,7 @@ function resolveStateHome(client: ClientDescriptor, cwd = process.cwd()): string
   return join(homedir(), ".yaaif", client.stateHomeSuffix);
 }
 
-export function loadConfig(client = clientDescriptor("cursor")): Config {
+export function loadConfig(client: ClientDescriptor = clientDescriptor("cursor")): Config {
   const scopes = env("YAAIF_OIDC_SCOPES", "openid profile email offline_access")
     .split(/\s+/)
     .filter(Boolean);

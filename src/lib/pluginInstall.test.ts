@@ -20,7 +20,16 @@ import {
   parseInstallOptions,
   parseNoLogin,
   parseOffline,
+  parseBuildOnly,
+  parseCodePath,
+  parseGradlePath,
+  parseJetbrainsPluginsDir,
+  parseKeepOldVersions,
+  parseDryRun,
   parsePluginSrc,
+  parsePluginRef,
+  parsePluginSha256,
+  parsePluginSourceBaseUrl,
   pluginDestHealthy,
   resolveMcpJsonPath,
   shouldCopyPluginPath,
@@ -37,6 +46,15 @@ test("parseInstall flags", () => {
   assert.equal(parseInstallAction(["--install", "--client", "cursor"]), true);
   assert.equal(parsePluginSrc(["--plugin-src", "/tmp/p"]), "/tmp/p");
   assert.equal(parsePluginSrc(["--plugin-src=/tmp/p"]), "/tmp/p");
+  assert.equal(parsePluginRef(["--plugin-ref", "v1.7.0"]), "v1.7.0");
+  assert.equal(parsePluginSha256(["--plugin-sha256", "a".repeat(64)]), "a".repeat(64));
+  assert.equal(parsePluginSourceBaseUrl(["--plugin-source-base-url", "https://mirror.example/yaaif"]), "https://mirror.example/yaaif");
+  assert.equal(parseBuildOnly(["--build-only"]), true);
+  assert.equal(parseCodePath(["--code-path", "/opt/code"]), "/opt/code");
+  assert.equal(parseGradlePath(["--gradle-path", "/opt/gradle"]), "/opt/gradle");
+  assert.equal(parseJetbrainsPluginsDir(["--jetbrains-plugins-dir", "/opt/plugins"]), "/opt/plugins");
+  assert.equal(parseKeepOldVersions(["--keep-old-versions"]), true);
+  assert.equal(parseDryRun(["--dry-run"]), true);
   assert.equal(parseOffline(["--offline"]), true);
   assert.equal(parseNoLogin(["--no-login"]), true);
   assert.equal(parseForce(["--force"]), true);
@@ -319,14 +337,54 @@ test("executeInstall refuses npx-cache cli paths unless --cli-path", async () =>
   }
 });
 
-test("executeInstall cursor without --plugin-src fails", async () => {
+test("executeInstall downloads matching Cursor source when --plugin-src is omitted", async () => {
+  const src = await mkdtemp(join(tmpdir(), "yaaif-download-src-"));
+  const dest = await mkdtemp(join(tmpdir(), "yaaif-download-dest-"));
+  const home = await mkdtemp(join(tmpdir(), "yaaif-download-home-"));
+  const prevHome = process.env.YAAIF_CURSOR_HOME;
+  process.env.YAAIF_CURSOR_HOME = home;
+  let cleaned = false;
+  try {
+    const bridgeSource = await writeCli(src);
+    await mkdir(join(src, ".cursor-plugin"), { recursive: true });
+    await writeFile(join(src, ".cursor-plugin", "plugin.json"), '{"name":"yaaif","version":"1.7.0"}\n');
+    await writeFile(join(src, "mcp.json"), '{"mcpServers":{}}\n');
+    const code = await executeInstall(
+      {
+        client: "cursor",
+        offline: false,
+        noLogin: true,
+        force: false,
+        cliPathExplicit: false,
+        cursorDest: dest,
+        bridgeSource,
+        pluginSourceDownloader: async () => ({
+          path: src,
+          cleanup: async () => { cleaned = true; },
+        }),
+      },
+      { argv: ["--client", "cursor"], probe: async () => false, interactive: false },
+    );
+    assert.equal(code, 0);
+    assert.equal(cleaned, true);
+    assert.match(await readFile(join(dest, ".cursor-plugin", "plugin.json"), "utf8"), /1\.7\.0/);
+    assert.match(await readFile(join(home, "bridge", "yaaif-platform-mcp-1.7.0.mjs"), "utf8"), /env node/);
+  } finally {
+    if (prevHome === undefined) delete process.env.YAAIF_CURSOR_HOME;
+    else process.env.YAAIF_CURSOR_HOME = prevHome;
+    await rm(src, { recursive: true, force: true });
+    await rm(dest, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("executeInstall offline requires an explicit plugin source", async () => {
   await assert.rejects(
-    () =>
-      executeInstall(
-        { client: "cursor", offline: false, noLogin: true, force: false, cliPathExplicit: false },
-        { argv: ["--client", "cursor"] },
-      ),
-    /--plugin-src is required/,
+    () => executeInstall(
+      { client: "cursor", offline: true, noLogin: true, force: false, cliPathExplicit: false },
+      { argv: ["--client", "cursor"] },
+    ),
+    /--plugin-src is required with --offline/,
   );
 });
 
@@ -361,6 +419,7 @@ test("executeInstall claude --offline rewrites .mcp.json and keeps user_config e
         cliPathExplicit: true,
         nodePath: process.execPath,
         cliPath,
+        pluginCacheRoot: join(home, "cache"),
       },
       { argv: ["--client", "claude"], probe: async () => false, interactive: false },
     );
@@ -377,6 +436,242 @@ test("executeInstall claude --offline rewrites .mcp.json and keeps user_config e
     else process.env.YAAIF_CLAUDE_HOME = prevHome;
     if (prevLogin === undefined) delete process.env.YAAIF_INSTALLER_NO_LOGIN;
     else process.env.YAAIF_INSTALLER_NO_LOGIN = prevLogin;
+    await rm(src, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("executeInstall stages the bundled bridge outside the npx cache by default", async () => {
+  const src = await mkdtemp(join(tmpdir(), "yaaif-plug-default-"));
+  const dest = await mkdtemp(join(tmpdir(), "yaaif-dest-default-"));
+  const home = await mkdtemp(join(tmpdir(), "yaaif-home-default-"));
+  const prevHome = process.env.YAAIF_CURSOR_HOME;
+  process.env.YAAIF_CURSOR_HOME = home;
+  try {
+    const bridgeSource = await writeCli(src);
+    await mkdir(join(src, ".cursor-plugin"), { recursive: true });
+    await writeFile(join(src, ".cursor-plugin", "plugin.json"), '{"name":"yaaif","version":"1.7.0"}\n');
+    await writeFile(join(src, "mcp.json"), '{"mcpServers":{}}\n');
+    const code = await executeInstall(
+      {
+        client: "cursor",
+        pluginSrc: src,
+        offline: false,
+        noLogin: true,
+        force: false,
+        cliPathExplicit: false,
+        cursorDest: dest,
+        nodePath: process.execPath,
+        bridgeSource,
+      },
+      { argv: ["--client", "cursor"], probe: async () => false, interactive: false },
+    );
+    assert.equal(code, 0);
+    const mcp = JSON.parse(await readFile(join(dest, "mcp.json"), "utf8")) as {
+      mcpServers: { yaaif: { command: string; args: string[] } };
+    };
+    const staged = join(home, "bridge", "yaaif-platform-mcp-1.7.0.mjs");
+    assert.equal(mcp.mcpServers.yaaif.command, process.execPath);
+    assert.deepEqual(mcp.mcpServers.yaaif.args, [staged, "--client", "cursor"]);
+    assert.equal(await readFile(staged, "utf8"), "#!/usr/bin/env node\n");
+    assert.doesNotMatch(staged, /_npx/);
+  } finally {
+    if (prevHome === undefined) delete process.env.YAAIF_CURSOR_HOME;
+    else process.env.YAAIF_CURSOR_HOME = prevHome;
+    await rm(src, { recursive: true, force: true });
+    await rm(dest, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("executeInstall keeps downloaded Claude source in managed state", async () => {
+  const src = await mkdtemp(join(tmpdir(), "yaaif-claude-download-src-"));
+  const home = await mkdtemp(join(tmpdir(), "yaaif-claude-download-home-"));
+  const prevHome = process.env.YAAIF_CLAUDE_HOME;
+  process.env.YAAIF_CLAUDE_HOME = home;
+  let cleaned = false;
+  try {
+    await writeFile(join(src, ".mcp.json"), JSON.stringify({
+      mcpServers: { yaaif: { command: "npx", args: ["-y", MCP_PACKAGE_PIN, "--client", "claude"], env: { KEEP: "yes" } } },
+    }));
+    const code = await executeInstall(
+      {
+        client: "claude",
+        offline: false,
+        noLogin: true,
+        force: false,
+        cliPathExplicit: false,
+        pluginSourceDownloader: async () => ({ path: src, cleanup: async () => { cleaned = true; } }),
+        pluginCacheRoot: join(home, "cache"),
+      },
+      { argv: ["--client", "claude"], probe: async () => false, interactive: false },
+    );
+    assert.equal(code, 0);
+    assert.equal(cleaned, true);
+    const mcp = JSON.parse(await readFile(join(home, "plugin", ".mcp.json"), "utf8")) as {
+      mcpServers: { yaaif: { args: string[]; env: Record<string, string> } };
+    };
+    assert.deepEqual(mcp.mcpServers.yaaif.args, ["-y", MCP_PACKAGE_PIN, "--client", "claude"]);
+    assert.equal(mcp.mcpServers.yaaif.env.KEEP, "yes");
+  } finally {
+    if (prevHome === undefined) delete process.env.YAAIF_CLAUDE_HOME;
+    else process.env.YAAIF_CLAUDE_HOME = prevHome;
+    await rm(src, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+for (const client of ["vscode", "intellij"] as const) {
+  test(`executeInstall invokes the ${client} native installer with downloaded source`, async () => {
+    const src = await mkdtemp(join(tmpdir(), `yaaif-${client}-native-src-`));
+    const home = await mkdtemp(join(tmpdir(), `yaaif-${client}-native-home-`));
+    const envName = client === "vscode" ? "YAAIF_VSCODE_HOME" : "YAAIF_INTELLIJ_HOME";
+    const previous = process.env[envName];
+    process.env[envName] = home;
+    let cleaned = false;
+    let nativeSource = "";
+    try {
+      const code = await executeInstall(
+        {
+          client,
+          offline: false,
+          noLogin: true,
+          force: false,
+          cliPathExplicit: false,
+          buildOnly: true,
+          pluginSourceDownloader: async () => ({ path: src, cleanup: async () => { cleaned = true; } }),
+          nativeInstaller: async (options) => {
+            nativeSource = options.sourceDir;
+            return { artifact: join(home, "artifact"), installed: false };
+          },
+        },
+        { argv: ["--client", client], probe: async () => false, interactive: false },
+      );
+      assert.equal(code, 0);
+      assert.equal(nativeSource, src);
+      assert.equal(cleaned, true);
+    } finally {
+      if (previous === undefined) delete process.env[envName];
+      else process.env[envName] = previous;
+      await rm(src, { recursive: true, force: true });
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+}
+
+test("failed Cursor verification restores the previous plugin and launcher", async () => {
+  const src = await mkdtemp(join(tmpdir(), "yaaif-rollback-cursor-src-"));
+  const dest = await mkdtemp(join(tmpdir(), "yaaif-rollback-cursor-dest-"));
+  const home = await mkdtemp(join(tmpdir(), "yaaif-rollback-cursor-home-"));
+  const previous = process.env.YAAIF_CURSOR_HOME;
+  process.env.YAAIF_CURSOR_HOME = home;
+  try {
+    const cliPath = await writeCli(src);
+    await mkdir(join(src, ".cursor-plugin"), { recursive: true });
+    await writeFile(join(src, ".cursor-plugin", "plugin.json"), '{"version":"1.7.0"}');
+    await writeFile(join(src, "mcp.json"), '{"mcpServers":{}}');
+    await mkdir(join(dest, ".cursor-plugin"), { recursive: true });
+    await writeFile(join(dest, ".cursor-plugin", "plugin.json"), '{"version":"1.3.0"}');
+    await writeFile(join(dest, "mcp.json"), '{"mcpServers":{"yaaif":{"command":"original"}}}');
+    await assert.rejects(() => executeInstall({
+      client: "cursor",
+      pluginSrc: src,
+      offline: true,
+      noLogin: true,
+      force: false,
+      cliPathExplicit: true,
+      cursorDest: dest,
+      nodePath: "/missing/node",
+      cliPath,
+      pluginCacheRoot: join(home, "cache"),
+    }, { argv: ["--client", "cursor"], probe: async () => false, interactive: false }), /install verify failed/);
+    assert.match(await readFile(join(dest, ".cursor-plugin", "plugin.json"), "utf8"), /1\.3\.0/);
+    const mcp = JSON.parse(await readFile(join(dest, "mcp.json"), "utf8")) as { mcpServers: { yaaif: { command: string } } };
+    assert.equal(mcp.mcpServers.yaaif.command, "original");
+    assert.equal(existsSync(`${dest}.__old`), false);
+    assert.equal(existsSync(`${dest}.__staging`), false);
+  } finally {
+    if (previous === undefined) delete process.env.YAAIF_CURSOR_HOME;
+    else process.env.YAAIF_CURSOR_HOME = previous;
+    await rm(src, { recursive: true, force: true });
+    await rm(dest, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("failed managed Claude install restores source and launcher", async () => {
+  const src = await mkdtemp(join(tmpdir(), "yaaif-rollback-claude-src-"));
+  const home = await mkdtemp(join(tmpdir(), "yaaif-rollback-claude-home-"));
+  const previous = process.env.YAAIF_CLAUDE_HOME;
+  process.env.YAAIF_CLAUDE_HOME = home;
+  try {
+    await writeFile(join(src, ".mcp.json"), '{"mcpServers":{"yaaif":{"command":"new"}}}');
+    const managed = join(home, "plugin");
+    await mkdir(managed, { recursive: true });
+    await writeFile(join(managed, ".mcp.json"), '{"mcpServers":{"yaaif":{"command":"previous"}}}');
+    await writeFile(join(home, "active-profile.json"), "not-json");
+    await assert.rejects(() => executeInstall({
+      client: "claude",
+      offline: false,
+      noLogin: true,
+      force: false,
+      cliPathExplicit: false,
+      pluginCacheRoot: join(home, "cache"),
+      pluginSourceDownloader: async () => ({ path: src, cleanup: async () => undefined }),
+    }, { argv: ["--client", "claude"], probe: async () => false, interactive: false }));
+    const mcp = JSON.parse(await readFile(join(managed, ".mcp.json"), "utf8")) as { mcpServers: { yaaif: { command: string } } };
+    assert.equal(mcp.mcpServers.yaaif.command, "previous");
+    assert.equal(existsSync(`${managed}.__old`), false);
+  } finally {
+    if (previous === undefined) delete process.env.YAAIF_CLAUDE_HOME;
+    else process.env.YAAIF_CLAUDE_HOME = previous;
+    await rm(src, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("failed native install rolls back VS Code and IntelliJ artifacts", async () => {
+  const src = await mkdtemp(join(tmpdir(), "yaaif-rollback-native-src-"));
+  const home = await mkdtemp(join(tmpdir(), "yaaif-rollback-native-home-"));
+  const previousVscode = process.env.YAAIF_VSCODE_HOME;
+  const previousIntellij = process.env.YAAIF_INTELLIJ_HOME;
+  process.env.YAAIF_VSCODE_HOME = home;
+  process.env.YAAIF_INTELLIJ_HOME = home;
+  try {
+    await writeFile(join(home, "active-profile.json"), "not-json");
+    const packages = join(home, "packages");
+    await mkdir(packages, { recursive: true });
+    await writeFile(join(packages, "yaaif-vscode-1.7.0.vsix"), "previous-vsix");
+    const pluginsDir = join(home, "plugins");
+    await mkdir(pluginsDir, { recursive: true });
+    await writeFile(join(pluginsDir, "yaaif-jetbrains.jar.backup"), "previous-jar");
+    const calls: string[] = [];
+    await assert.rejects(() => executeInstall({
+      client: "vscode",
+      pluginSrc: src,
+      offline: false,
+      noLogin: true,
+      force: false,
+      cliPathExplicit: false,
+      nativeInstaller: async () => ({ artifact: join(packages, "yaaif-vscode-1.7.0.vsix"), installed: true }),
+      nativeCommandRunner: async (file) => { calls.push(file); },
+    }, { argv: ["--client", "vscode"], probe: async () => false, interactive: false }));
+    assert.ok(calls.includes("code"));
+    await assert.rejects(() => executeInstall({
+      client: "intellij",
+      pluginSrc: src,
+      offline: false,
+      noLogin: true,
+      force: false,
+      cliPathExplicit: false,
+      nativeInstaller: async () => ({ artifact: "new-jar", installed: true, pluginsDir }),
+    }, { argv: ["--client", "intellij"], probe: async () => false, interactive: false }));
+    assert.equal(await readFile(join(pluginsDir, "yaaif-jetbrains.jar"), "utf8"), "previous-jar");
+  } finally {
+    if (previousVscode === undefined) delete process.env.YAAIF_VSCODE_HOME;
+    else process.env.YAAIF_VSCODE_HOME = previousVscode;
+    if (previousIntellij === undefined) delete process.env.YAAIF_INTELLIJ_HOME;
+    else process.env.YAAIF_INTELLIJ_HOME = previousIntellij;
     await rm(src, { recursive: true, force: true });
     await rm(home, { recursive: true, force: true });
   }

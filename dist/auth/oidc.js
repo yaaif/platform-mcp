@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import open from "open";
 import { yaaifFetch } from "../client/tls.js";
 import { renderLoginCallbackPage } from "./callbackPage.js";
+import { SessionStore } from "./store.js";
 /** Browser sign-in needs a browser on this machine; OpenCode runs on a server. */
 export class BrowserLoginUnavailableError extends Error {
     constructor(label) {
@@ -114,6 +115,11 @@ export class AuthClient {
     constructor(cfg, store) {
         this.cfg = cfg;
         this.store = store;
+    }
+    async useProfile(profileId) {
+        this.devicePending = null;
+        this.store = SessionStore.forProfile(this.cfg.stateHome, profileId);
+        await this.store.ensureHome(this.cfg.stateHome);
     }
     assertIssuerMatch(sess) {
         if (!sess?.tokens.access_token || !sess.oidc_authority)

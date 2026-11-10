@@ -4,6 +4,7 @@ import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/t
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
 import { ensureDevSession } from "../lib/devSession.js";
+import { collectFeatureCapabilities } from "../lib/featureProbes.js";
 import { collectInstallHealth, cursorPluginDest } from "../lib/pluginInstall.js";
 import { fail, ok } from "./helpers.js";
 function tlsHint(err, tls = getTlsResolveInfo()) {
@@ -20,6 +21,18 @@ function tlsHint(err, tls = getTlsResolveInfo()) {
     return "TLS verify failed. Set YAAIF_EXTRA_CA_FILE (or profile extra_ca_file) to your corporate/Traefik CA PEM.";
 }
 export function registerDoctorTools(server, ctx) {
+    server.registerTool("yaaif_features", {
+        description: "Probe backend support and current access for agents, Scenarios, Credentials, Wiki and platform updates using read-only GET requests. Permission denial proves support but not access.",
+        inputSchema: {},
+    }, async () => {
+        try {
+            const capabilities = await collectFeatureCapabilities(ctx.api);
+            return ok("Backend feature capabilities loaded.", capabilities);
+        }
+        catch (e) {
+            return fail(String(e));
+        }
+    });
     server.registerTool("yaaif_doctor", {
         description: "End-to-end health narrative: profile, OIDC discovery, TLS, auth, tenant, catalog ping. Prefer before create/plan work.",
         inputSchema: {
@@ -296,6 +309,15 @@ export function registerDoctorTools(server, ctx) {
                         : undefined,
                 });
                 void ctx.telemetry.increment(routeOk ? "doctor_ops_telemetry_ok" : "doctor_ops_telemetry_fail");
+            }
+            try {
+                const capabilities = await collectFeatureCapabilities(ctx.api);
+                for (const [id, feature] of Object.entries(capabilities.features)) {
+                    add(`feature_${id}`, feature.supported, feature);
+                }
+            }
+            catch (e) {
+                add("feature_probes", false, String(e));
             }
         }
         for (const health of collectInstallHealth({

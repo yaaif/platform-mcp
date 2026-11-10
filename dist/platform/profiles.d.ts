@@ -45,6 +45,7 @@ export declare class ProfileStore {
     listCustom(): Promise<PlatformProfile[]>;
     saveCustom(profiles: PlatformProfile[]): Promise<void>;
     upsertCustom(profile: PlatformProfile): Promise<PlatformProfile>;
+    cloneCustom(sourceId: string, destinationId: string, label?: string): Promise<PlatformProfile>;
     deleteCustom(profileId: string): Promise<boolean>;
     listAll(): Promise<PlatformProfile[]>;
     get(profileId: string): Promise<PlatformProfile | null>;

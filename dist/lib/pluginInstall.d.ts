@@ -1,6 +1,10 @@
 import type { BridgeClient } from "../config.js";
 import { type PlatformPromptFn, type ProfileProbeFn } from "./installerSetup.js";
-export declare const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.8";
+import { type DownloadedPluginSource } from "./pluginSource.js";
+import { installNativePlugin, type CommandRunner, type NativeInstallResult } from "./nativePlugin.js";
+import { type CleanupResult } from "./pluginCleanup.js";
+import { MCP_PACKAGE_PIN } from "../version.js";
+export { MCP_PACKAGE_PIN };
 export declare const CURSOR_MCP_ENV: Record<string, string>;
 export declare const CLAUDE_MCP_ENV: Record<string, string>;
 export type InstallOptions = {
@@ -13,6 +17,20 @@ export type InstallOptions = {
     cursorDest?: string;
     cliPath?: string;
     nodePath?: string;
+    bridgeSource?: string;
+    pluginRef?: string;
+    pluginSha256?: string;
+    pluginSourceBaseUrl?: string;
+    pluginSourceDownloader?: () => Promise<DownloadedPluginSource>;
+    buildOnly?: boolean;
+    dryRun?: boolean;
+    codePath?: string;
+    gradlePath?: string;
+    jetbrainsPluginsDir?: string;
+    nativeInstaller?: typeof installNativePlugin;
+    nativeCommandRunner?: CommandRunner;
+    keepOldVersions?: boolean;
+    pluginCacheRoot?: string;
 };
 export type McpServerEntry = {
     command: string;
@@ -26,6 +44,15 @@ export type InstallHealthCheck = {
 };
 export declare function parseInstallAction(argv: string[]): boolean;
 export declare function parsePluginSrc(argv: string[]): string | undefined;
+export declare function parsePluginRef(argv: string[]): string | undefined;
+export declare function parsePluginSha256(argv: string[]): string | undefined;
+export declare function parsePluginSourceBaseUrl(argv: string[]): string | undefined;
+export declare function parseBuildOnly(argv: string[]): boolean;
+export declare function parseDryRun(argv: string[]): boolean;
+export declare function parseKeepOldVersions(argv: string[]): boolean;
+export declare function parseCodePath(argv: string[]): string | undefined;
+export declare function parseGradlePath(argv: string[]): string | undefined;
+export declare function parseJetbrainsPluginsDir(argv: string[]): string | undefined;
 export declare function parseOffline(argv: string[]): boolean;
 export declare function parseNoLogin(argv: string[]): boolean;
 export declare function parseForce(argv: string[]): boolean;
@@ -56,14 +83,14 @@ export declare function stageCursorPlugin(src: string, dest: string): Promise<st
 export declare function swapStagedPlugin(staging: string, dest: string): Promise<void>;
 export declare function writeMcpJson(path: string, entry: McpServerEntry): Promise<void>;
 export declare function collectInstallHealth(opts: {
-    client: BridgeClient;
+    client: BridgeClient | "cli";
     cursorDest?: string;
     mcpJsonPath?: string;
     nodeVersion?: string;
 }): InstallHealthCheck[];
-export declare function mcpLaunchCheck(client: BridgeClient, mcpPath: string): InstallHealthCheck;
+export declare function mcpLaunchCheck(client: BridgeClient | "cli", mcpPath: string): InstallHealthCheck;
 export declare function verifyInstall(opts: {
-    client: BridgeClient;
+    client: BridgeClient | "cli";
     cursorDest?: string;
     mcpJsonPath?: string;
 }): Promise<InstallHealthCheck[]>;
@@ -71,6 +98,7 @@ export declare function nextSteps(opts: {
     client: BridgeClient;
     pluginDest?: string;
     pluginSrc?: string;
+    nativeResult?: NativeInstallResult;
 }): string;
 export declare function runInstall(opts?: {
     argv?: string[];
@@ -78,6 +106,7 @@ export declare function runInstall(opts?: {
     prompt?: PlatformPromptFn;
     interactive?: boolean;
 }): Promise<number>;
+export declare function cleanupAfterInstall(options: InstallOptions, pluginDest: string | undefined, nativeResult: NativeInstallResult | undefined): Promise<CleanupResult>;
 export declare function executeInstall(options: InstallOptions, setup?: {
     argv: string[];
     probe?: ProfileProbeFn;

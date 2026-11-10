@@ -1,0 +1,54 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { AuthClient } from "./auth/oidc.js";
+import { SessionStore } from "./auth/store.js";
+import { ApiClient } from "./client/http.js";
+import { installTlsDispatcher } from "./client/tls.js";
+import { loadConfig } from "./config.js";
+import { PlanExecutionStore } from "./lib/planExecution.js";
+import { TelemetryStore } from "./lib/telemetry.js";
+import { applyActiveProfile, applyProfileToConfig, inferProfileId, ProfileStore } from "./platform/profiles.js";
+import { registerAllTools } from "./tools/register.js";
+import { PACKAGE_VERSION } from "./version.js";
+export async function createRuntime(client, profileId) {
+    const cfg = loadConfig(client);
+    const profiles = new ProfileStore(cfg.stateHome, cfg.client.oidcClientId);
+    await profiles.ensureHome();
+    if (profileId) {
+        const profile = await profiles.get(profileId);
+        if (!profile)
+            throw new Error(`unknown profile: ${profileId}`);
+        applyProfileToConfig(cfg, profile);
+    }
+    else {
+        const fromFile = await applyActiveProfile(cfg, profiles);
+        if (!fromFile && cfg.activeProfileId) {
+            const profile = await profiles.get(cfg.activeProfileId);
+            if (profile)
+                applyProfileToConfig(cfg, profile);
+        }
+    }
+    cfg.activeProfileId = cfg.activeProfileId || inferProfileId(cfg);
+    const store = SessionStore.forProfile(cfg.stateHome, cfg.activeProfileId);
+    await store.ensureHome(cfg.stateHome);
+    if (!profileId)
+        await store.migrateLegacySession(cfg.stateHome);
+    installTlsDispatcher(cfg);
+    const auth = new AuthClient(cfg, store);
+    return {
+        cfg,
+        store,
+        profiles,
+        auth,
+        api: new ApiClient(cfg, auth),
+        plans: new PlanExecutionStore(cfg.stateHome),
+        telemetry: new TelemetryStore(cfg.stateHome),
+    };
+}
+export function createMcpServer(runtime) {
+    const server = new McpServer({
+        name: `yaaif-${runtime.cfg.client.id}`,
+        version: PACKAGE_VERSION,
+    });
+    registerAllTools(server, runtime);
+    return server;
+}

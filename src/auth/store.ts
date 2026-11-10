@@ -26,11 +26,26 @@ export type Session = {
   dev_agent_id?: string;
 };
 
+function profileDirectory(profileId: string): string {
+  const normalized = profileId.trim().toLowerCase();
+  if (!normalized) throw new Error("profile id is required for profile session storage");
+  return normalized.replace(/[^a-z0-9._-]/g, "_");
+}
+
 export class SessionStore {
   readonly path: string;
 
-  constructor(stateHome: string) {
-    this.path = join(stateHome, "session.json");
+  constructor(
+    stateHome: string,
+    private readonly profileId?: string,
+  ) {
+    this.path = profileId
+      ? join(stateHome, "profile-sessions", profileDirectory(profileId), "session.json")
+      : join(stateHome, "session.json");
+  }
+
+  static forProfile(stateHome: string, profileId: string): SessionStore {
+    return new SessionStore(stateHome, profileId);
   }
 
   async ensureHome(stateHome: string): Promise<void> {
@@ -39,8 +54,11 @@ export class SessionStore {
 
   async load(): Promise<Session | null> {
     try {
-      const raw = await readFile(this.path, "utf8");
-      return JSON.parse(raw) as Session;
+      const session = JSON.parse(await readFile(this.path, "utf8")) as Session;
+      if (this.profileId && session.profile_id && session.profile_id !== this.profileId) {
+        throw new Error(`session belongs to profile ${session.profile_id}, not ${this.profileId}; login again for this server`);
+      }
+      return session;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
@@ -48,6 +66,10 @@ export class SessionStore {
   }
 
   async save(session: Session): Promise<void> {
+    if (this.profileId && session.profile_id && session.profile_id !== this.profileId) {
+      throw new Error(`refusing to save ${session.profile_id} session under ${this.profileId}`);
+    }
+    if (this.profileId) session.profile_id = this.profileId;
     await this.ensureHome(dirname(this.path));
     const tmp = `${this.path}.tmp`;
     await writeFile(tmp, JSON.stringify(session, null, 2), { mode: 0o600 });
@@ -60,5 +82,21 @@ export class SessionStore {
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }
+  }
+
+  async migrateLegacySession(stateHome: string): Promise<boolean> {
+    if (!this.profileId) return false;
+    const legacyPath = join(stateHome, "session.json");
+    const legacy = new SessionStore(stateHome);
+    const session = await legacy.load();
+    if (!session || (session.profile_id && session.profile_id !== this.profileId)) return false;
+    try {
+      await readFile(this.path, "utf8");
+      return false;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    await this.save(session);
+    return true;
   }
 }

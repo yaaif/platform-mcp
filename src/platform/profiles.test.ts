@@ -62,3 +62,29 @@ test("ProfileStore upsert and activate custom profile", async () => {
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test("ProfileStore clones configuration without activating or duplicating destination", async () => {
+  const home = await mkdtemp(join(tmpdir(), "yaaif-profile-clone-"));
+  try {
+    const store = new ProfileStore(home);
+    await store.upsertCustom({
+      id: "prod",
+      label: "Production",
+      oidc_authority: "https://prod.example/auth/realms/yaaif",
+      api_base_url: "https://prod.example",
+      agent_base_url: "",
+      control_plane_base_url: "",
+      approval_base_url: "",
+    });
+    const cloned = await store.cloneCustom("prod", "stage", "Staging");
+    assert.equal(cloned.id, "stage");
+    assert.equal(cloned.api_base_url, "https://prod.example");
+    assert.equal(cloned.oidc_authority, "https://prod.example/auth/realms/yaaif");
+    assert.equal(cloned.label, "Staging");
+    assert.equal(cloned.builtin, false);
+    assert.equal((await store.getActive())?.profile_id ?? null, null);
+    await assert.rejects(() => store.cloneCustom("prod", "stage"), /already exists/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

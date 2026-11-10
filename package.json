@@ -1,7 +1,7 @@
 {
   "name": "@yaaif/platform-mcp",
-  "version": "1.3.8",
-  "description": "YAA\\F platform MCP bridge for Cursor, VS Code, IntelliJ IDEA, Codex, Claude Code, and OpenCode — product docs, ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), desktop command MCP packages, API keys, ambient, desktop, approvals",
+  "version": "1.7.0",
+  "description": "YAA\\F CLI and platform MCP bridge for terminal/CI, Cursor, VS Code, IntelliJ IDEA, Codex, Claude Code, and OpenCode — product docs, ops support, local tools, profiles, auth, doctor, plan, scenarios (agent specs), skills, MCP deployments (compose+k8s), desktop command MCP packages, API keys, credentials, ambient, desktop, approvals",
   "type": "module",
   "license": "Apache-2.0",
   "author": "YAA\\F / BeezLabs",
@@ -10,12 +10,14 @@
     "url": "git+https://github.com/yaaif/platform-mcp.git"
   },
   "bin": {
+    "yaaif": "dist/yaaif-cli.js",
     "yaaif-platform-mcp": "dist/cli.js",
     "platform-mcp": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "files": [
     "dist",
+    "plugin-contract.json",
     "README.md"
   ],
   "scripts": {

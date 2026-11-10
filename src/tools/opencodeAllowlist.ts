@@ -1,5 +1,5 @@
 /** Tools exposed to OpenCode. OpenAI-compatible models reject >128 tools total
- * (builtins + MCP). Keep this curated set well under that ceiling. */
+ * (builtins + MCP). Keep this curated set at or below the contract ceiling. */
 export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_governance_capabilities",
   "yaaif_governance_inspect",
@@ -9,41 +9,26 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   // Auth / session
   "yaaif_platform_list",
   "yaaif_platform_use",
-  "yaaif_platform_export",
-  "yaaif_platform_save",
-  "yaaif_configure_check",
-  "yaaif_login",
   "yaaif_login_device",
   "yaaif_logout",
   "yaaif_whoami",
   "yaaif_list_tenants",
   "yaaif_set_tenant",
   "yaaif_ensure_session",
-  // Doctor
+  // Doctor / backend capabilities
   "yaaif_doctor",
-  "yaaif_telemetry_get",
-  "yaaif_telemetry_set",
-  // Skills (authoring + map)
+  "yaaif_features",
+  // Skills (authoring + safe mapping)
   "yaaif_skill_list",
   "yaaif_skill_get",
-  "yaaif_skill_runtime_status",
   "yaaif_skill_file_tree",
   "yaaif_skill_read_file",
   "yaaif_skill_create",
   "yaaif_skill_write_file",
   "yaaif_skill_enable",
-  "yaaif_skill_map_agents",
   "yaaif_skill_map_agents_merge",
   "yaaif_skill_validate",
-  "yaaif_skill_refresh",
-  "yaaif_skill_runtime_reload",
   "yaaif_skill_tools_check",
-  "yaaif_skill_validate_module",
-  "yaaif_skill_develop",
-  "yaaif_skill_guided_draft",
-  "yaaif_skill_mcp_tool_catalog",
-  "yaaif_skill_update_module_files",
-  "yaaif_skill_edit_section",
   // Agents / ambient
   "yaaif_agent_list",
   "yaaif_agent_get",
@@ -59,7 +44,6 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_ambient_test_trigger",
   "yaaif_ambient_schedule_create",
   "yaaif_ambient_schedules_list",
-  "yaaif_ambient_schedule_set_enabled",
   // File workflows (file.ready / file.failed / file.review_decided)
   "yaaif_file_workflow_template",
   "yaaif_file_workflow_create",
@@ -67,7 +51,7 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_ambient_run_get",
   "yaaif_list_ambient_workflows",
   "yaaif_trigger_ambient_workflow",
-  // Catalog / MCP discovery (read-heavy)
+  // Catalog / MCP discovery
   "yaaif_catalog_overview",
   "yaaif_mcp_servers_list",
   "yaaif_mcp_server_get",
@@ -75,8 +59,6 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_mcp_source_push",
   "yaaif_mcp_tools_list",
   "yaaif_mcp_tool_get",
-  "yaaif_mcp_tool_set_enabled",
-  "yaaif_mcp_tool_delete",
   "yaaif_mcp_server_refresh",
   // MCP deployments
   "yaaif_deployment_settings_get",
@@ -86,34 +68,31 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_mcp_deployment_update",
   "yaaif_mcp_deployment_deploy",
   "yaaif_mcp_deployment_redeploy",
-  "yaaif_mcp_deployment_stop",
-  "yaaif_mcp_deployment_delete",
   "yaaif_mcp_deployment_register",
   "yaaif_mcp_deployment_status",
   "yaaif_mcp_deployment_logs",
-  "yaaif_mcp_deployment_k8s_status",
   // API keys bound to MCP deployments
   "yaaif_api_key_list",
   "yaaif_api_key_get",
   "yaaif_api_key_create",
-  "yaaif_api_key_update",
-  "yaaif_api_key_rotate",
-  "yaaif_api_key_delete",
   "yaaif_api_key_bind_deployment",
+  // External credentials and server injection
+  "yaaif_credential_list",
+  "yaaif_credential_create",
+  "yaaif_mcp_server_create",
+  "yaaif_mcp_credential_profiles_list",
+  "yaaif_mcp_credential_profile_upsert",
+  "yaaif_mcp_credential_mappings_list",
+  "yaaif_mcp_credential_mapping_upsert",
   // Desktop command MCP packages and worker mappings
   "yaaif_desktop_workers_list",
   "yaaif_desktop_skill_mappings_list",
   "yaaif_desktop_skill_mapping_set",
-  "yaaif_desktop_skill_mapping_delete",
   "yaaif_desktop_tool_packages_list",
-  "yaaif_desktop_tool_package_get",
   "yaaif_desktop_tool_package_inspect",
   "yaaif_desktop_tool_package_publish",
-  "yaaif_desktop_tool_package_update",
-  "yaaif_desktop_tool_package_delete",
   "yaaif_desktop_tool_package_install",
   "yaaif_desktop_tool_package_upgrade",
-  "yaaif_desktop_tool_package_uninstall",
   "yaaif_desktop_tool_package_worker_status",
   // Local tools
   "yaaif_local_tools_list",
@@ -127,7 +106,6 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_file_load_context",
   "yaaif_load_artifacts",
   "yaaif_file_share_link",
-  "yaaif_generate_file",
   "yaaif_file_generate",
   "yaaif_file_convert",
   "yaaif_file_transform",
@@ -139,22 +117,25 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_agent_spec_create",
   "yaaif_agent_spec_update",
   "yaaif_agent_spec_coverage",
-  "yaaif_agent_spec_readiness",
   "yaaif_agent_spec_files_list",
   "yaaif_agent_spec_file_put",
-  "yaaif_agent_spec_file_delete",
   // Product docs for the installed version
   "yaaif_docs_search",
   "yaaif_docs_page",
+  // Wiki and release inspection (read-only)
+  "yaaif_wiki_pages_list",
+  "yaaif_wiki_page_get",
+  "yaaif_wiki_graph",
+  "yaaif_wiki_common_status",
+  "yaaif_platform_update_status",
+  "yaaif_platform_update_jobs_list",
+  "yaaif_platform_update_job_get",
   // Ops read-only
   "yaaif_ops_correlate",
   "yaaif_ops_analyze",
   "yaaif_ops_session_get",
   "yaaif_ops_ambient_run_get",
   "yaaif_ops_telemetry",
-  "yaaif_ops_diagnosis_list",
-  "yaaif_ops_diagnosis_get",
-  "yaaif_ops_diagnosis_create",
 ] as const;
 
 export const OPENCODE_TOOL_ALLOWLIST_SET = new Set<string>(OPENCODE_TOOL_ALLOWLIST);

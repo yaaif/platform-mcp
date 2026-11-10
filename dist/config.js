@@ -72,6 +72,14 @@ const CLIENTS = {
         updatedBy: "yaaif-opencode",
     },
 };
+export const CLI_CLIENT = {
+    id: "cli",
+    label: "YAAIF CLI",
+    oidcClientId: "yaaif-cli",
+    stateHomeEnv: "YAAIF_CLI_HOME",
+    stateHomeSuffix: "cli",
+    updatedBy: "yaaif-cli",
+};
 export function clientDescriptor(client) {
     return CLIENTS[client];
 }

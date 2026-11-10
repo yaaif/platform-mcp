@@ -1,7 +1,8 @@
 export type BridgeClient = "cursor" | "vscode" | "intellij" | "codex" | "claude" | "opencode";
-export type ClientDescriptor = {
-    id: BridgeClient;
-    label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code" | "OpenCode";
+export type ClientId = BridgeClient | "cli";
+export type ClientDescriptor<I extends ClientId = ClientId> = {
+    id: I;
+    label: "Cursor" | "VS Code" | "IntelliJ IDEA" | "Codex" | "Claude Code" | "OpenCode" | "YAAIF CLI";
     oidcClientId: string;
     stateHomeEnv: string;
     stateHomeSuffix: string;
@@ -10,6 +11,7 @@ export type ClientDescriptor = {
 /** Per-user OpenCode workspace: <root>/<subject>/... Default root is /projects/users. */
 export declare function opencodeWorkspaceSubject(cwd: string): string | undefined;
 export declare function opencodeStateHome(subject: string): string;
+export declare const CLI_CLIENT: ClientDescriptor;
 export type Config = {
     client: ClientDescriptor;
     oidcAuthority: string;
@@ -32,8 +34,8 @@ export type Config = {
     /** Client private key PEM for mTLS (optional). */
     clientKeyFile: string;
 };
-export declare function clientDescriptor(client: BridgeClient): ClientDescriptor;
-export declare function parseBridgeClient(argv?: string[]): ClientDescriptor;
+export declare function clientDescriptor(client: BridgeClient): ClientDescriptor<BridgeClient>;
+export declare function parseBridgeClient(argv?: string[]): ClientDescriptor<BridgeClient>;
 /** Explicit `YAAIF_DOCS_BASE_URL`, otherwise the docs UI on the platform host. */
 export declare function resolveDocsBaseUrl(apiBaseUrl: string): string;
 export declare function loadConfig(client?: ClientDescriptor): Config;

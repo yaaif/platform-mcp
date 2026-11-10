@@ -79,3 +79,9 @@ jobs:
           assert len(names) >= 40, len(names)
           print("ok", len(names))
           PY
+      - name: Smoke terminal CLI
+        run: |
+          test "$(node dist/yaaif-cli.js --version)" = "$(node -p "require('./package.json').version")"
+          export YAAIF_CLI_HOME="$(mktemp -d)"
+          node dist/yaaif-cli.js tools describe yaaif_credential_create --json >/dev/null
+          node dist/yaaif-cli.js whoami --json >/dev/null

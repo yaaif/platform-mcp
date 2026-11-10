@@ -1,14 +1,22 @@
-import { access, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { constants as fsConstants } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BridgeClient } from "../config.js";
-import { parseBridgeClient } from "../config.js";
+import { clientDescriptor, loadConfig, parseBridgeClient } from "../config.js";
 import { runInstallerSetup, type PlatformPromptFn, type ProfileProbeFn } from "./installerSetup.js";
+import { downloadPluginSource, type DownloadedPluginSource } from "./pluginSource.js";
+import { createInstallPlan } from "./installPlan.js";
+import { installNativePlugin, type CommandRunner, type NativeInstallResult } from "./nativePlugin.js";
+import { cleanupVersionedCache, retirePluginPaths, type CleanupResult } from "./pluginCleanup.js";
+import { captureFileBackup, restoreFileBackup, restoreIntellijPlugin, restoreStagedPlugin, runInstallRollback, type InstallRollbackAction } from "./installRollback.js";
+import { stageStableBridge, stableBridgePath } from "./stableBridge.js";
+import { execFileSync } from "node:child_process";
+import { MCP_PACKAGE_PIN, PACKAGE_VERSION } from "../version.js";
 
-export const MCP_PACKAGE_PIN = "@yaaif/platform-mcp@1.3.8";
+export { MCP_PACKAGE_PIN };
 
 export const CURSOR_MCP_ENV: Record<string, string> = {
   YAAIF_PLATFORM_PROFILE: "${YAAIF_PLATFORM_PROFILE}",
@@ -46,6 +54,20 @@ export type InstallOptions = {
   cursorDest?: string;
   cliPath?: string;
   nodePath?: string;
+  bridgeSource?: string;
+  pluginRef?: string;
+  pluginSha256?: string;
+  pluginSourceBaseUrl?: string;
+  pluginSourceDownloader?: () => Promise<DownloadedPluginSource>;
+  buildOnly?: boolean;
+  dryRun?: boolean;
+  codePath?: string;
+  gradlePath?: string;
+  jetbrainsPluginsDir?: string;
+  nativeInstaller?: typeof installNativePlugin;
+  nativeCommandRunner?: CommandRunner;
+  keepOldVersions?: boolean;
+  pluginCacheRoot?: string;
 };
 
 export type McpServerEntry = {
@@ -67,6 +89,42 @@ export function parseInstallAction(argv: string[]): boolean {
 
 export function parsePluginSrc(argv: string[]): string | undefined {
   return flagValue(argv, "--plugin-src");
+}
+
+export function parsePluginRef(argv: string[]): string | undefined {
+  return flagValue(argv, "--plugin-ref");
+}
+
+export function parsePluginSha256(argv: string[]): string | undefined {
+  return flagValue(argv, "--plugin-sha256");
+}
+
+export function parsePluginSourceBaseUrl(argv: string[]): string | undefined {
+  return flagValue(argv, "--plugin-source-base-url");
+}
+
+export function parseBuildOnly(argv: string[]): boolean {
+  return argv.includes("--build-only");
+}
+
+export function parseDryRun(argv: string[]): boolean {
+  return argv.includes("--dry-run");
+}
+
+export function parseKeepOldVersions(argv: string[]): boolean {
+  return argv.includes("--keep-old-versions");
+}
+
+export function parseCodePath(argv: string[]): string | undefined {
+  return flagValue(argv, "--code-path");
+}
+
+export function parseGradlePath(argv: string[]): string | undefined {
+  return flagValue(argv, "--gradle-path");
+}
+
+export function parseJetbrainsPluginsDir(argv: string[]): string | undefined {
+  return flagValue(argv, "--jetbrains-plugins-dir");
 }
 
 export function parseOffline(argv: string[]): boolean {
@@ -97,6 +155,15 @@ export function parseInstallOptions(argv: string[]): InstallOptions {
     force: parseForce(argv),
     cliPathExplicit: Boolean(cliPath),
     cliPath: cliPath ? resolve(cliPath) : undefined,
+    pluginRef: parsePluginRef(argv),
+    pluginSha256: parsePluginSha256(argv),
+    pluginSourceBaseUrl: parsePluginSourceBaseUrl(argv),
+    buildOnly: parseBuildOnly(argv),
+    dryRun: parseDryRun(argv),
+    codePath: parseCodePath(argv),
+    gradlePath: parseGradlePath(argv),
+    jetbrainsPluginsDir: parseJetbrainsPluginsDir(argv),
+    keepOldVersions: parseKeepOldVersions(argv),
   };
 }
 
@@ -266,7 +333,6 @@ export async function swapStagedPlugin(staging: string, dest: string): Promise<v
     }
     throw e;
   }
-  await rm(old, { recursive: true, force: true });
 }
 
 export async function writeMcpJson(path: string, entry: McpServerEntry): Promise<void> {
@@ -293,7 +359,7 @@ export async function writeMcpJson(path: string, entry: McpServerEntry): Promise
 }
 
 export function collectInstallHealth(opts: {
-  client: BridgeClient;
+  client: BridgeClient | "cli";
   cursorDest?: string;
   mcpJsonPath?: string;
   nodeVersion?: string;
@@ -334,7 +400,7 @@ export function collectInstallHealth(opts: {
   return checks;
 }
 
-export function mcpLaunchCheck(client: BridgeClient, mcpPath: string): InstallHealthCheck {
+export function mcpLaunchCheck(client: BridgeClient | "cli", mcpPath: string): InstallHealthCheck {
   if (!existsSync(mcpPath)) {
     return { name: "mcp_launch", ok: false, detail: { mcpPath, hint: "mcp.json missing" } };
   }
@@ -378,7 +444,7 @@ export function mcpLaunchCheck(client: BridgeClient, mcpPath: string): InstallHe
 }
 
 export async function verifyInstall(opts: {
-  client: BridgeClient;
+  client: BridgeClient | "cli";
   cursorDest?: string;
   mcpJsonPath?: string;
 }): Promise<InstallHealthCheck[]> {
@@ -404,7 +470,7 @@ export async function verifyInstall(opts: {
   return checks;
 }
 
-export function nextSteps(opts: { client: BridgeClient; pluginDest?: string; pluginSrc?: string }): string {
+export function nextSteps(opts: { client: BridgeClient; pluginDest?: string; pluginSrc?: string; nativeResult?: NativeInstallResult }): string {
   if (opts.client === "cursor") {
     const dest = opts.pluginDest ?? cursorPluginDest();
     return [
@@ -424,13 +490,17 @@ export function nextSteps(opts: { client: BridgeClient; pluginDest?: string; plu
   }
   if (opts.client === "vscode") {
     return [
-      "Install the YAAIF for VS Code extension, then run YAAIF: Configure MCP Bridge.",
+      opts.nativeResult?.installed
+        ? "Installed the YAAIF VS Code extension. Reload VS Code, then run YAAIF: Configure MCP Bridge."
+        : `Built ${opts.nativeResult?.artifact ?? "the YAAIF VSIX"}. Install it with code --install-extension, then run YAAIF: Configure MCP Bridge.`,
       "Open Copilot Chat and run the YAAIF login and doctor commands.",
     ].join("\n");
   }
   if (opts.client === "intellij") {
     return [
-      "Install the YAAIF for IntelliJ plugin, then run YAAIF: Configure MCP Bridge.",
+      opts.nativeResult?.installed
+        ? `Installed the YAAIF IntelliJ plugin${opts.nativeResult.pluginsDir ? ` to ${opts.nativeResult.pluginsDir}` : ""}. Restart the IDE, then run YAAIF: Configure MCP Bridge.`
+        : `Built ${opts.nativeResult?.artifact ?? "the YAAIF IntelliJ jar"}. Install it in JetBrains settings, then run YAAIF: Configure MCP Bridge.`,
       "Open JetBrains AI Assistant and run the YAAIF login and doctor commands.",
     ].join("\n");
   }
@@ -467,6 +537,42 @@ export async function runInstall(
   }
 }
 
+export async function cleanupAfterInstall(
+  options: InstallOptions,
+  pluginDest: string | undefined,
+  nativeResult: NativeInstallResult | undefined,
+): Promise<CleanupResult> {
+  if (options.keepOldVersions || options.buildOnly) return { removed: [] };
+  const { client } = options;
+  const stateHome = loadConfig(clientDescriptor(client)).stateHome;
+  const backupRoot = join(stateHome, "plugin-backups");
+  if (client === "cursor") {
+    if (!pluginDest) return { removed: [] };
+    return await retirePluginPaths([`${pluginDest}.__old`, `${pluginDest}.__staging`], backupRoot);
+  }
+  if (client === "claude" || client === "codex") {
+    const cacheRoot = options.pluginCacheRoot ?? join(homedir(), `.${client}`, "plugins", "cache", "yaaif", "yaaif-platform");
+    return await cleanupVersionedCache({ client, cacheRoot, currentVersion: PACKAGE_VERSION, backupRoot });
+  }
+  if (client === "vscode") {
+    const packagesDir = join(stateHome, "packages");
+    if (!existsSync(packagesDir)) return { removed: [] };
+    const currentArtifact = nativeResult?.artifact ?? join(packagesDir, `yaaif-vscode-${PACKAGE_VERSION}.vsix`);
+    const old = (await readdir(packagesDir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".vsix"))
+      .map((entry) => join(packagesDir, entry.name))
+      .filter((path) => path !== currentArtifact);
+    return await retirePluginPaths(old, backupRoot);
+  }
+  if (!nativeResult?.installed || !nativeResult.pluginsDir) return { removed: [] };
+  const old = (await readdir(nativeResult.pluginsDir, { withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => /^yaaif-jetbrains.*\.(?:jar|backup|tmp)$/.test(name) && name !== "yaaif-jetbrains.jar")
+    .map((name) => join(nativeResult.pluginsDir!, name));
+  return await retirePluginPaths(old, backupRoot);
+}
+
 export async function executeInstall(
   options: InstallOptions,
   setup: {
@@ -475,6 +581,60 @@ export async function executeInstall(
     prompt?: PlatformPromptFn;
     interactive?: boolean;
   } = { argv: [] },
+): Promise<number> {
+  if (options.dryRun) {
+    console.log(JSON.stringify(await createInstallPlan(options), null, 2));
+    return 0;
+  }
+  let pluginSrc = options.pluginSrc;
+  let downloaded: DownloadedPluginSource | undefined;
+  try {
+    if (!pluginSrc && options.client !== "opencode") {
+      if (options.offline) throw new Error("--plugin-src is required with --offline");
+      downloaded = options.pluginSourceDownloader
+        ? await options.pluginSourceDownloader()
+        : await downloadPluginSource({ client: options.client, ref: options.pluginRef, sha256: options.pluginSha256, baseUrl: options.pluginSourceBaseUrl });
+      pluginSrc = downloaded.path;
+      if (options.client === "claude" || options.client === "codex") {
+        const managed = join(loadConfig(clientDescriptor(options.client)).stateHome, "plugin");
+        const staging = await stageCursorPlugin(pluginSrc, managed);
+        await swapStagedPlugin(staging, managed);
+        pluginSrc = managed;
+      }
+    }
+    return await executeInstallWithSource({ ...options, pluginSrc }, setup);
+  } finally {
+    await downloaded?.cleanup();
+  }
+}
+
+async function executeInstallWithSource(
+  options: InstallOptions,
+  setup: {
+    argv: string[];
+    probe?: ProfileProbeFn;
+    prompt?: PlatformPromptFn;
+    interactive?: boolean;
+  },
+): Promise<number> {
+  const rollback: InstallRollbackAction[] = [];
+  try {
+    return await executeInstallWithSourceInner(options, setup, rollback);
+  } catch (error) {
+    await runInstallRollback(rollback, error);
+    throw error;
+  }
+}
+
+async function executeInstallWithSourceInner(
+  options: InstallOptions,
+  setup: {
+    argv: string[];
+    probe?: ProfileProbeFn;
+    prompt?: PlatformPromptFn;
+    interactive?: boolean;
+  },
+  rollback: InstallRollbackAction[],
 ): Promise<number> {
   const { client, offline, noLogin, force, cliPathExplicit } = options;
   const pluginSrc = options.pluginSrc;
@@ -487,7 +647,7 @@ export async function executeInstall(
   if (client === "cursor" && pluginSrc) {
     assertCursorPluginSrc(pluginSrc);
   }
-  if (pluginSrc && (client === "vscode" || client === "intellij" || client === "claude" || client === "codex")) {
+  if (pluginSrc && (client === "claude" || client === "codex")) {
     assertMcpPluginSrc(client, pluginSrc);
   }
 
@@ -495,7 +655,10 @@ export async function executeInstall(
   let cliPath = options.cliPath;
   let nodePath = options.nodePath;
   if (useAbsolute) {
-    cliPath = cliPath ?? defaultCliJsPath();
+    const stateHome = loadConfig(clientDescriptor(client)).stateHome;
+    const cliBackup = await captureFileBackup(options.cliPath ?? stableBridgePath(stateHome));
+    rollback.push(() => restoreFileBackup(cliBackup));
+    cliPath = cliPath ?? await stageStableBridge(stateHome, options.bridgeSource);
     assertStableCliPath(cliPath, cliPathExplicit);
     nodePath = nodePath ?? process.execPath;
   }
@@ -506,6 +669,10 @@ export async function executeInstall(
     nodePath,
     cliPath,
   });
+
+  if (pluginSrc && (client === "claude" || client === "codex") && existsSync(`${pluginSrc}.__old`)) {
+    rollback.push(() => restoreStagedPlugin(`${pluginSrc}.__staging`, pluginSrc));
+  }
 
   let pluginDest: string | undefined;
   let mcpJsonPath: string | undefined;
@@ -519,16 +686,51 @@ export async function executeInstall(
       console.error(
         `install: dest ${pluginDest} is ${destVersion} (newer than package ${srcVersion}); skipping copy (pass --force to overwrite)`,
       );
+      const backup = await captureFileBackup(join(pluginDest, "mcp.json"));
+      rollback.push(() => restoreFileBackup(backup));
       await writeMcpJson(join(pluginDest, "mcp.json"), launch);
     } else {
       const staging = await stageCursorPlugin(pluginSrc, pluginDest);
       await writeMcpJson(join(staging, "mcp.json"), launch);
       await swapStagedPlugin(staging, pluginDest);
+      rollback.push(() => restoreStagedPlugin(`${pluginDest}.__staging`, pluginDest!));
     }
     mcpJsonPath = join(pluginDest, "mcp.json");
-  } else if (pluginSrc && (client === "vscode" || client === "intellij" || client === "claude" || client === "codex")) {
+  } else if (pluginSrc && (client === "claude" || client === "codex")) {
     mcpJsonPath = resolveMcpJsonPath(client, pluginSrc);
+    const backup = await captureFileBackup(mcpJsonPath);
+    rollback.push(() => restoreFileBackup(backup));
     await writeMcpJson(mcpJsonPath, launch);
+  }
+
+  let nativeResult: NativeInstallResult | undefined;
+  if (pluginSrc && (client === "vscode" || client === "intellij")) {
+    const stateHome = loadConfig(clientDescriptor(client)).stateHome;
+    const previousVsix = client === "vscode"
+      ? await captureFileBackup(join(stateHome, "packages", `yaaif-vscode-${PACKAGE_VERSION}.vsix`))
+      : null;
+    nativeResult = await (options.nativeInstaller ?? installNativePlugin)({
+      client,
+      sourceDir: pluginSrc,
+      stateHome,
+      offline,
+      buildOnly: options.buildOnly,
+      codePath: options.codePath,
+      gradlePath: options.gradlePath,
+      jetbrainsPluginsDir: options.jetbrainsPluginsDir,
+      runCommand: options.nativeCommandRunner,
+    });
+    if (nativeResult.installed && client === "vscode" && previousVsix?.contents) {
+      rollback.push(async () => {
+        const code = options.codePath ?? (process.platform === "win32" ? "code.cmd" : "code");
+        if (options.nativeCommandRunner) await options.nativeCommandRunner(code, ["--install-extension", previousVsix!.path], pluginSrc);
+        else execFileSync(code, ["--install-extension", previousVsix!.path], { cwd: pluginSrc });
+      });
+    }
+    if (nativeResult.installed && client === "intellij" && nativeResult.pluginsDir) {
+      const pluginsDir = nativeResult.pluginsDir;
+      rollback.push(() => restoreIntellijPlugin(pluginsDir));
+    }
   }
 
   const code = await runInstallerSetup("all", {
@@ -548,7 +750,14 @@ export async function executeInstall(
     );
   }
 
-  console.log(nextSteps({ client, pluginDest, pluginSrc }));
+  let cleanup: CleanupResult = { removed: [] };
+  try {
+    cleanup = await cleanupAfterInstall(options, pluginDest, nativeResult);
+  } catch (error) {
+    console.error(`install: warning: old-version cleanup failed: ${String(error)}`);
+  }
+  console.log(nextSteps({ client, pluginDest, pluginSrc, nativeResult }));
+  if (cleanup.backupDir) console.log(`Moved older plugin files to ${cleanup.backupDir}`);
   return 0;
 }
 

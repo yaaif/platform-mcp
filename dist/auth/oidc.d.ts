@@ -1,5 +1,5 @@
 import type { Config } from "../config.js";
-import type { Session, SessionStore } from "./store.js";
+import { SessionStore, type Session } from "./store.js";
 /** Browser sign-in needs a browser on this machine; OpenCode runs on a server. */
 export declare class BrowserLoginUnavailableError extends Error {
     constructor(label: string);
@@ -27,9 +27,10 @@ export declare class IssuerMismatchError extends Error {
 }
 export declare class AuthClient {
     private readonly cfg;
-    private readonly store;
+    private store;
     private devicePending;
     constructor(cfg: Config, store: SessionStore);
+    useProfile(profileId: string): Promise<void>;
     assertIssuerMatch(sess: Session | null): void;
     login(): Promise<{
         session: Session;

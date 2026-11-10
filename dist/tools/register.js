@@ -1,4 +1,7 @@
 import { registerGovernanceTools } from "./registerGovernance.js";
+import { registerWikiTools } from "./registerWiki.js";
+import { registerPlatformUpdateTools } from "./registerPlatformUpdates.js";
+import { registerMigrationTools } from "./registerMigration.js";
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
 import { appendClampedLimit, clampCatalogLimit } from "../lib/catalogLimits.js";
@@ -28,6 +31,9 @@ import { execFileSync } from "node:child_process";
 export function registerAllTools(server, ctx) {
     registerAuthTools(server, ctx);
     registerGovernanceTools(server, ctx);
+    registerWikiTools(server, ctx);
+    registerPlatformUpdateTools(server, ctx);
+    registerMigrationTools(server, ctx);
     registerSkills(server, ctx);
     registerAmbient(server, ctx);
     registerMcp(server, ctx);

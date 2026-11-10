@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { browserLoginAvailable, IssuerMismatchError, ReauthRequiredError } from "../auth/oidc.js";
+import { SessionStore } from "../auth/store.js";
 import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { exportProfileEnv } from "../lib/profileExport.js";
 import {
@@ -158,10 +159,21 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
   }, async () => {
     const active = await ctx.profiles.getActive();
     const profiles = await ctx.profiles.listAll();
+    const withSessions = await Promise.all(profiles.map(async (profile) => {
+      const session = await SessionStore.forProfile(ctx.cfg.stateHome, profile.id).load().catch(() => null);
+      return {
+        ...profile,
+        session: {
+          authenticated: Boolean(session?.tokens.access_token),
+          tenant_id: session?.tenant_id ?? null,
+          tenant_name: session?.tenant_name ?? null,
+        },
+      };
+    }));
     return ok("Listed platform profiles.", {
       active_profile_id: active?.profile_id || ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
       inferred_profile_id: inferProfileId(ctx.cfg),
-      profiles,
+      profiles: withSessions,
       current: {
         oidc_authority: ctx.cfg.oidcAuthority,
         api_base: ctx.cfg.apiBaseUrl,
@@ -174,7 +186,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
 
   server.registerTool("yaaif_platform_use", {
     description:
-      "Switch active platform profile (hosted | local-hybrid | local | custom id). Clears session if OIDC issuer changes.",
+      "Switch active platform profile with isolated sessions per server. Previous profiles keep their sessions; a new profile with a different issuer starts signed out.",
     inputSchema: {
       profile_id: z.string(),
       clear_session_on_issuer_change: z.boolean().optional(),
@@ -186,6 +198,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
       const prevIssuer = ctx.cfg.oidcAuthority;
       await ctx.profiles.setActive(profile.id);
       applyProfileToConfig(ctx.cfg, profile);
+      await ctx.auth.useProfile(profile.id);
       installTlsDispatcher(ctx.cfg);
       const issuerChanged = prevIssuer.replace(/\/+$/, "").toLowerCase()
         !== profile.oidc_authority.replace(/\/+$/, "").toLowerCase();

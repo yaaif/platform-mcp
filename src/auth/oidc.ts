@@ -5,7 +5,7 @@ import open from "open";
 import { yaaifFetch } from "../client/tls.js";
 import type { Config } from "../config.js";
 import { renderLoginCallbackPage } from "./callbackPage.js";
-import type { Session, SessionStore, TokenSet } from "./store.js";
+import { SessionStore, type Session, type TokenSet } from "./store.js";
 
 /** Browser sign-in needs a browser on this machine; OpenCode runs on a server. */
 export class BrowserLoginUnavailableError extends Error {
@@ -139,8 +139,14 @@ export class AuthClient {
 
   constructor(
     private readonly cfg: Config,
-    private readonly store: SessionStore,
+    private store: SessionStore,
   ) {}
+
+  async useProfile(profileId: string): Promise<void> {
+    this.devicePending = null;
+    this.store = SessionStore.forProfile(this.cfg.stateHome, profileId);
+    await this.store.ensureHome(this.cfg.stateHome);
+  }
 
   assertIssuerMatch(sess: Session | null): void {
     if (!sess?.tokens.access_token || !sess.oidc_authority) return;

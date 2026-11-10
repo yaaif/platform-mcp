@@ -5,6 +5,7 @@ import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/t
 import { inferProfileId } from "../platform/profiles.js";
 import { redactSecrets } from "../lib/telemetry.js";
 import { ensureDevSession } from "../lib/devSession.js";
+import { collectFeatureCapabilities } from "../lib/featureProbes.js";
 import { collectInstallHealth, cursorPluginDest } from "../lib/pluginInstall.js";
 import type { Ctx } from "./ctx.js";
 import { fail, ok } from "./helpers.js";
@@ -24,6 +25,16 @@ function tlsHint(err: unknown, tls = getTlsResolveInfo()): string | undefined {
 }
 
 export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
+  server.registerTool("yaaif_features", {
+    description: "Probe backend support and current access for agents, Scenarios, Credentials, Wiki and platform updates using read-only GET requests. Permission denial proves support but not access.",
+    inputSchema: {},
+  }, async () => {
+    try {
+      const capabilities = await collectFeatureCapabilities(ctx.api);
+      return ok("Backend feature capabilities loaded.", capabilities);
+    } catch (e) { return fail(String(e)); }
+  });
+
   server.registerTool("yaaif_doctor", {
     description:
       "End-to-end health narrative: profile, OIDC discovery, TLS, auth, tenant, catalog ping. Prefer before create/plan work.",
@@ -329,6 +340,14 @@ export function registerDoctorTools(server: McpServer, ctx: Ctx): void {
             : undefined,
         });
         void ctx.telemetry.increment(routeOk ? "doctor_ops_telemetry_ok" : "doctor_ops_telemetry_fail");
+      }
+      try {
+        const capabilities = await collectFeatureCapabilities(ctx.api);
+        for (const [id, feature] of Object.entries(capabilities.features)) {
+          add(`feature_${id}`, feature.supported, feature);
+        }
+      } catch (e) {
+        add("feature_probes", false, String(e));
       }
     }
 
