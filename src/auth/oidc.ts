@@ -131,8 +131,17 @@ type DevicePending = {
   userCode: string;
   intervalSec: number;
   deadline: number;
+  /** Set when a profile switch abandons this login: the poll stops and saves nothing. */
+  cancelled: { value: boolean };
   pollPromise: Promise<Session>;
 };
+
+export class DeviceLoginCancelledError extends Error {
+  constructor() {
+    super("device login cancelled by a platform profile switch");
+    this.name = "DeviceLoginCancelledError";
+  }
+}
 
 export class AuthClient {
   private devicePending: DevicePending | null = null;
@@ -145,6 +154,10 @@ export class AuthClient {
   ) {}
 
   async useProfile(profileId: string): Promise<void> {
+    // A login still polling belongs to the previous issuer: stop it, or its
+    // tokens would land in the new profile's store (or its failure, minutes
+    // later, would be the MCP's last words).
+    if (this.devicePending) this.devicePending.cancelled.value = true;
     this.devicePending = null;
     this.store = SessionStore.forProfile(this.cfg.stateHome, profileId);
     await this.store.ensureHome(this.cfg.stateHome);
@@ -354,6 +367,7 @@ export class AuthClient {
       }
     }
 
+    const cancelled = { value: false };
     const pending: DevicePending = {
       deviceCode,
       verifier,
@@ -361,6 +375,7 @@ export class AuthClient {
       userCode,
       intervalSec,
       deadline,
+      cancelled,
       pollPromise: this.pollDeviceTokens({
         deviceCode,
         verifier,
@@ -368,6 +383,7 @@ export class AuthClient {
         userCode,
         intervalSec,
         deadline,
+        cancelled,
       }).finally(() => {
         if (this.devicePending === pending) this.devicePending = null;
       }),
@@ -376,6 +392,7 @@ export class AuthClient {
     // wait=false returns before the poll finishes. Attach a handler so a later
     // rejection cannot crash the MCP process and drop the tool list.
     void pending.pollPromise.catch((err: unknown) => {
+      if (err instanceof DeviceLoginCancelledError) return;
       console.error(`device login poll failed: ${err instanceof Error ? err.message : String(err)}`);
     });
 
@@ -434,11 +451,13 @@ export class AuthClient {
     userCode: string;
     intervalSec: number;
     deadline: number;
+    cancelled: { value: boolean };
   }): Promise<Session> {
-    const { deviceCode, verifier, verificationUri, userCode, deadline } = opts;
+    const { deviceCode, verifier, verificationUri, userCode, deadline, cancelled } = opts;
     let intervalSec = opts.intervalSec;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, Math.max(intervalSec, this.minPollSec) * 1000));
+      if (cancelled.value) throw new DeviceLoginCancelledError();
       const pollBody = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: deviceCode,
@@ -451,6 +470,7 @@ export class AuthClient {
         body: pollBody,
       });
       const raw = (await tokenRes.json()) as Record<string, unknown>;
+      if (cancelled.value) throw new DeviceLoginCancelledError();
       if (tokenRes.ok && raw.access_token) {
         return this.persistTokens(raw);
       }

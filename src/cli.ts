@@ -5,6 +5,7 @@ import { runInstallerSetup } from "./lib/installerSetup.js";
 import { parseInstallAction, runInstall } from "./lib/pluginInstall.js";
 import { parseSetupAction } from "./lib/installerSetup.js";
 import { createMcpServer, createRuntime } from "./runtime.js";
+import { guardStdioPipes } from "./lib/stdioGuard.js";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
   process.on("unhandledRejection", (err) => {
     console.error("unhandled rejection", err);
   });
+  guardStdioPipes();
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

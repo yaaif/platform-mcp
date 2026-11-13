@@ -81,3 +81,27 @@ test("a wait that runs out reports the same code pending instead of abandoning i
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test("a profile switch stops the old login: it saves nothing and logs no failure", async () => {
+  const kc = await fakeKeycloak();
+  const { auth, home } = await client(kc.authority);
+  const logged: string[] = [];
+  const saved = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args.map(String).join(" ")); };
+  try {
+    const first = await auth.deviceLogin({ wait: false, timeout_ms: 1 });
+    assert.equal(first.status, "pending");
+    await auth.useProfile("other-profile");
+    kc.state.approved = true; // the old code is approved after the switch
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(await auth.session(), null, "no tokens from the abandoned login");
+    assert.deepEqual(logged.filter((line) => line.includes("device login poll failed")), []);
+    const polls = kc.state.polls;
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(kc.state.polls, polls, "the old poll stopped");
+  } finally {
+    console.error = saved;
+    await kc.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
