@@ -108,18 +108,49 @@ function browserFacingVerificationUri(uri, authority, userCode) {
         return raw;
     }
 }
+export class DeviceLoginCancelledError extends Error {
+    constructor() {
+        super("device login cancelled by a platform profile switch");
+        this.name = "DeviceLoginCancelledError";
+    }
+}
 export class AuthClient {
     cfg;
-    store;
+    profileStore;
     devicePending = null;
-    constructor(cfg, store) {
+    /** Lower bound on the device poll interval in seconds (tests lower it). */
+    minPollSec = 2;
+    constructor(cfg, profileStore) {
         this.cfg = cfg;
-        this.store = store;
+        this.profileStore = profileStore;
+    }
+    /**
+     * The session store of the active profile. Tools switch profiles by applying
+     * one to cfg (platform_use, platform_save activate, ensure_session
+     * profile_id, the CLI); the store follows cfg here so none of them can leave
+     * sessions read from, or tokens saved to, the previous profile.
+     */
+    get store() {
+        const active = this.cfg.activeProfileId;
+        if (active && this.profileStore.profileId !== undefined && active !== this.profileStore.profileId) {
+            this.switchStore(active);
+        }
+        return this.profileStore;
+    }
+    switchStore(profileId) {
+        // A login still polling belongs to the previous profile: stop it, or its
+        // failure, minutes later, would be the MCP's last words.
+        if (this.devicePending)
+            this.devicePending.cancelled.value = true;
+        this.devicePending = null;
+        this.profileStore = SessionStore.forProfile(this.cfg.stateHome, profileId);
     }
     async useProfile(profileId) {
-        this.devicePending = null;
-        this.store = SessionStore.forProfile(this.cfg.stateHome, profileId);
-        await this.store.ensureHome(this.cfg.stateHome);
+        // Selecting the profile already in use keeps a login in progress: agents
+        // re-select it while the user is approving the code.
+        if (profileId !== this.profileStore.profileId)
+            this.switchStore(profileId);
+        await this.profileStore.ensureHome(this.cfg.stateHome);
     }
     assertIssuerMatch(sess) {
         if (!sess?.tokens.access_token || !sess.oidc_authority)
@@ -242,16 +273,26 @@ export class AuthClient {
      */
     async deviceLogin(opts = {}) {
         const wait = opts.wait === true;
-        const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
+        // How long a wait=true call blocks. It does not end the login: the code is
+        // polled until Keycloak expires it, so an approval after this still counts.
+        const waitMs = opts.timeout_ms ?? 5 * 60 * 1000;
         if (this.devicePending) {
-            return this.finishOrReportPending(wait);
+            return this.finishOrReportPending(wait, waitMs);
         }
-        await this.store.ensureHome(this.cfg.stateHome);
+        const store = this.store;
+        await store.ensureHome(this.cfg.stateHome);
+        const target = {
+            authority: this.cfg.oidcAuthority,
+            clientId: this.cfg.oidcClientId,
+            profileId: this.cfg.activeProfileId || undefined,
+            tenantId: this.cfg.defaultTenantId || undefined,
+            store,
+        };
         const verifier = b64url(randomBytes(32));
         const challenge = b64url(createHash("sha256").update(verifier).digest());
-        const deviceEndpoint = `${this.cfg.oidcAuthority}/protocol/openid-connect/auth/device`;
+        const deviceEndpoint = `${target.authority}/protocol/openid-connect/auth/device`;
         const startBody = new URLSearchParams({
-            client_id: this.cfg.oidcClientId,
+            client_id: target.clientId,
             scope: this.cfg.oidcScopes.join(" "),
             code_challenge: challenge,
             code_challenge_method: "S256",
@@ -261,16 +302,30 @@ export class AuthClient {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: startBody,
         });
-        const startRaw = (await startRes.json());
-        if (!startRes.ok) {
-            throw new Error(`device auth start failed (${startRes.status}): ${JSON.stringify(startRaw)}. ` +
-                `Enable oauth2.device.authorization.grant.enabled (and PKCE S256 if required) on the ${this.cfg.oidcClientId} Keycloak client.`);
+        const startText = await startRes.text();
+        let startRaw = null;
+        try {
+            startRaw = JSON.parse(startText);
+        }
+        catch {
+            // Not Keycloak: usually an authority without /auth/realms/<realm>.
+        }
+        if (!startRes.ok || !startRaw) {
+            throw new Error(`device auth start failed (${startRes.status}) at ${deviceEndpoint}: ${startText.trim().slice(0, 200) || "empty response"}. ` +
+                (startRaw
+                    ? `Enable oauth2.device.authorization.grant.enabled (and PKCE S256 if required) on the ${target.clientId} Keycloak client.`
+                    : `Check the profile's oidc_authority (a Keycloak realm URL such as https://<host>/auth/realms/yaaif); yaaif_platform_list shows the saved profiles.`));
         }
         const deviceCode = String(startRaw.device_code ?? "");
         const userCode = String(startRaw.user_code ?? "");
-        const verificationUri = browserFacingVerificationUri(String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? ""), this.cfg.oidcAuthority, userCode);
+        const verificationUri = browserFacingVerificationUri(String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? ""), target.authority, userCode);
         const intervalSec = typeof startRaw.interval === "number" ? startRaw.interval : 5;
-        const deadline = Date.now() + timeoutMs;
+        // Poll for the code's whole life (Keycloak expires_in), not timeout_ms. A
+        // short timeout_ms (agents pass 1000 with wait=false) used to stop the poll
+        // seconds after the code was shown, so the user's approval was never
+        // collected and every retry showed a new code.
+        const expiresSec = typeof startRaw.expires_in === "number" && startRaw.expires_in > 0 ? startRaw.expires_in : 600;
+        const deadline = Date.now() + expiresSec * 1000;
         if (verificationUri) {
             // Server-side clients show the URL and code to the user instead.
             if (browserLoginAvailable(this.cfg)) {
@@ -279,6 +334,7 @@ export class AuthClient {
                 });
             }
         }
+        const cancelled = { value: false };
         const pending = {
             deviceCode,
             verifier,
@@ -286,6 +342,7 @@ export class AuthClient {
             userCode,
             intervalSec,
             deadline,
+            cancelled,
             pollPromise: this.pollDeviceTokens({
                 deviceCode,
                 verifier,
@@ -293,6 +350,8 @@ export class AuthClient {
                 userCode,
                 intervalSec,
                 deadline,
+                cancelled,
+                target,
             }).finally(() => {
                 if (this.devicePending === pending)
                     this.devicePending = null;
@@ -302,6 +361,8 @@ export class AuthClient {
         // wait=false returns before the poll finishes. Attach a handler so a later
         // rejection cannot crash the MCP process and drop the tool list.
         void pending.pollPromise.catch((err) => {
+            if (err instanceof DeviceLoginCancelledError)
+                return;
             console.error(`device login poll failed: ${err instanceof Error ? err.message : String(err)}`);
         });
         if (!wait) {
@@ -309,69 +370,85 @@ export class AuthClient {
                 status: "pending",
                 verification_uri: verificationUri,
                 user_code: userCode,
+                expires_at: new Date(deadline).toISOString(),
             };
         }
-        return this.finishOrReportPending(true);
+        return this.finishOrReportPending(true, waitMs);
     }
-    async finishOrReportPending(wait) {
+    // Complete when the poll has finished, else the same code still pending. A
+    // wait=true call blocks up to waitMs; running out reports pending and keeps
+    // polling, so the user can still approve the code already on screen.
+    async finishOrReportPending(wait, waitMs) {
         const pending = this.devicePending;
         if (!pending) {
             throw new Error("no device login in progress");
         }
-        if (!wait) {
-            const settled = await Promise.race([
-                pending.pollPromise.then((session) => ({ done: true, session })),
-                new Promise((r) => setTimeout(() => r({ done: false }), 25)),
-            ]);
-            if (settled.done) {
-                return {
-                    status: "complete",
-                    session: settled.session,
-                    verification_uri: pending.verificationUri,
-                    user_code: pending.userCode,
-                };
-            }
+        let timer;
+        const settled = await Promise.race([
+            pending.pollPromise.then((session) => ({ done: true, session })),
+            new Promise((r) => {
+                timer = setTimeout(() => r({ done: false }), wait ? Math.max(waitMs, 0) : 25);
+            }),
+        ]).finally(() => clearTimeout(timer));
+        if (settled.done) {
             return {
-                status: "pending",
+                status: "complete",
+                session: settled.session,
                 verification_uri: pending.verificationUri,
                 user_code: pending.userCode,
             };
         }
-        const session = await pending.pollPromise;
         return {
-            status: "complete",
-            session,
+            status: "pending",
             verification_uri: pending.verificationUri,
             user_code: pending.userCode,
+            expires_at: new Date(pending.deadline).toISOString(),
         };
     }
     async pollDeviceTokens(opts) {
-        const { deviceCode, verifier, verificationUri, userCode, intervalSec, deadline } = opts;
+        const { deviceCode, verifier, verificationUri, userCode, deadline, cancelled, target } = opts;
+        let intervalSec = opts.intervalSec;
         while (Date.now() < deadline) {
-            await new Promise((r) => setTimeout(r, Math.max(intervalSec, 2) * 1000));
+            await new Promise((r) => setTimeout(r, Math.max(intervalSec, this.minPollSec) * 1000));
+            if (cancelled.value)
+                throw new DeviceLoginCancelledError();
             const pollBody = new URLSearchParams({
                 grant_type: "urn:ietf:params:oauth:grant-type:device_code",
                 device_code: deviceCode,
-                client_id: this.cfg.oidcClientId,
+                client_id: target.clientId,
                 code_verifier: verifier,
             });
-            const tokenRes = await yaaifFetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
+            const tokenRes = await yaaifFetch(`${target.authority}/protocol/openid-connect/token`, {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: pollBody,
             });
-            const raw = (await tokenRes.json());
+            const tokenText = await tokenRes.text();
+            let raw = {};
+            try {
+                raw = JSON.parse(tokenText);
+            }
+            catch {
+                // A proxy error page: poll again, the code may still be approved.
+                if (!tokenRes.ok && tokenRes.status >= 500)
+                    continue;
+                throw new Error(`device auth poll failed (${tokenRes.status}): ${tokenText.trim().slice(0, 200)}`);
+            }
+            if (cancelled.value)
+                throw new DeviceLoginCancelledError();
             if (tokenRes.ok && raw.access_token) {
-                return this.persistTokens(raw);
+                return this.persistTokens(raw, target);
             }
             const err = String(raw.error ?? "");
+            if (err === "slow_down")
+                intervalSec += 5; // RFC 8628 3.5
             if (err === "authorization_pending" || err === "slow_down")
                 continue;
             throw new Error(`device auth poll failed: ${JSON.stringify(raw)}`);
         }
         throw new Error(`device login timed out. Open ${verificationUri} and enter code ${userCode}`);
     }
-    async persistTokens(raw) {
+    async persistTokens(raw, target) {
         const tokens = tokenSetFromJson(raw);
         const claims = tokens.id_token ? parseIdToken(tokens.id_token) : {};
         const session = {
@@ -379,11 +456,11 @@ export class AuthClient {
             subject: claims.subject,
             email: claims.email,
             name: claims.name,
-            tenant_id: this.cfg.defaultTenantId || undefined,
-            profile_id: this.cfg.activeProfileId || undefined,
-            oidc_authority: this.cfg.oidcAuthority,
+            tenant_id: target ? target.tenantId : this.cfg.defaultTenantId || undefined,
+            profile_id: target ? target.profileId : this.cfg.activeProfileId || undefined,
+            oidc_authority: target ? target.authority : this.cfg.oidcAuthority,
         };
-        await this.store.save(session);
+        await (target?.store ?? this.store).save(session);
         return session;
     }
     async logout(opts = {}) {

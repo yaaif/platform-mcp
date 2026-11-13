@@ -166,24 +166,24 @@ export declare const governanceOperation: z.ZodDiscriminatedUnion<"action", [z.Z
     action: "exception_create";
     reason: string;
     kind: "guard_bypass" | "classification_reaction";
+    expires_at?: string | undefined;
     data_class?: string | undefined;
     reaction?: string | undefined;
     agent_id?: string | undefined;
     stages?: string[] | undefined;
     bypass_guards?: string[] | undefined;
-    expires_at?: string | undefined;
 }, {
     scope: "user" | "tool" | "skill";
     target: string;
     action: "exception_create";
     reason: string;
     kind: "guard_bypass" | "classification_reaction";
+    expires_at?: string | undefined;
     data_class?: string | undefined;
     reaction?: string | undefined;
     agent_id?: string | undefined;
     stages?: string[] | undefined;
     bypass_guards?: string[] | undefined;
-    expires_at?: string | undefined;
 }>, z.ZodObject<{
     action: z.ZodLiteral<"exception_update">;
 } & {
@@ -196,55 +196,55 @@ export declare const governanceOperation: z.ZodDiscriminatedUnion<"action", [z.Z
         reason: z.ZodOptional<z.ZodString>;
         expires_at: z.ZodOptional<z.ZodString>;
     }, "strict", z.ZodTypeAny, {
+        expires_at?: string | undefined;
         reason?: string | undefined;
         reaction?: string | undefined;
         agent_id?: string | undefined;
         stages?: string[] | undefined;
         bypass_guards?: string[] | undefined;
-        expires_at?: string | undefined;
     }, {
+        expires_at?: string | undefined;
         reason?: string | undefined;
         reaction?: string | undefined;
         agent_id?: string | undefined;
         stages?: string[] | undefined;
         bypass_guards?: string[] | undefined;
-        expires_at?: string | undefined;
     }>, {
+        expires_at?: string | undefined;
         reason?: string | undefined;
         reaction?: string | undefined;
         agent_id?: string | undefined;
         stages?: string[] | undefined;
         bypass_guards?: string[] | undefined;
-        expires_at?: string | undefined;
     }, {
+        expires_at?: string | undefined;
         reason?: string | undefined;
         reaction?: string | undefined;
         agent_id?: string | undefined;
         stages?: string[] | undefined;
         bypass_guards?: string[] | undefined;
-        expires_at?: string | undefined;
     }>;
 }, "strict", z.ZodTypeAny, {
     id: string;
     action: "exception_update";
     changes: {
+        expires_at?: string | undefined;
         reason?: string | undefined;
         reaction?: string | undefined;
         agent_id?: string | undefined;
         stages?: string[] | undefined;
         bypass_guards?: string[] | undefined;
-        expires_at?: string | undefined;
     };
 }, {
     id: string;
     action: "exception_update";
     changes: {
+        expires_at?: string | undefined;
         reason?: string | undefined;
         reaction?: string | undefined;
         agent_id?: string | undefined;
         stages?: string[] | undefined;
         bypass_guards?: string[] | undefined;
-        expires_at?: string | undefined;
     };
 }>, z.ZodObject<{
     action: z.ZodLiteral<"exception_enable">;

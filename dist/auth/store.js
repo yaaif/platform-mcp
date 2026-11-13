@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 function profileDirectory(profileId) {
@@ -42,7 +43,8 @@ export class SessionStore {
         if (this.profileId)
             session.profile_id = this.profileId;
         await this.ensureHome(dirname(this.path));
-        const tmp = `${this.path}.tmp`;
+        // Unique per write: parallel tool calls save the same file.
+        const tmp = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
         await writeFile(tmp, JSON.stringify(session, null, 2), { mode: 0o600 });
         await rename(tmp, this.path);
     }

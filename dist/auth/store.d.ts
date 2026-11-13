@@ -22,7 +22,7 @@ export type Session = {
     dev_agent_id?: string;
 };
 export declare class SessionStore {
-    private readonly profileId?;
+    readonly profileId?: string | undefined;
     readonly path: string;
     constructor(stateHome: string, profileId?: string | undefined);
     static forProfile(stateHome: string, profileId: string): SessionStore;

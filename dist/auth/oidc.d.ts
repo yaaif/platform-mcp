@@ -25,11 +25,24 @@ export declare class IssuerMismatchError extends Error {
     readonly code = "issuer_mismatch";
     constructor(message: string, sessionAuthority: string, configAuthority: string);
 }
+export declare class DeviceLoginCancelledError extends Error {
+    constructor();
+}
 export declare class AuthClient {
     private readonly cfg;
-    private store;
+    private profileStore;
     private devicePending;
-    constructor(cfg: Config, store: SessionStore);
+    /** Lower bound on the device poll interval in seconds (tests lower it). */
+    minPollSec: number;
+    constructor(cfg: Config, profileStore: SessionStore);
+    /**
+     * The session store of the active profile. Tools switch profiles by applying
+     * one to cfg (platform_use, platform_save activate, ensure_session
+     * profile_id, the CLI); the store follows cfg here so none of them can leave
+     * sessions read from, or tokens saved to, the previous profile.
+     */
+    private get store();
+    private switchStore;
     useProfile(profileId: string): Promise<void>;
     assertIssuerMatch(sess: Session | null): void;
     login(): Promise<{
@@ -53,6 +66,7 @@ export declare class AuthClient {
         session?: Session;
         verification_uri: string;
         user_code: string;
+        expires_at?: string;
     }>;
     private finishOrReportPending;
     private pollDeviceTokens;
