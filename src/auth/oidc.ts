@@ -136,6 +136,15 @@ type DevicePending = {
   pollPromise: Promise<Session>;
 };
 
+/** Where a device login started: it polls and saves there even if cfg changes meanwhile. */
+type DeviceTarget = {
+  authority: string;
+  clientId: string;
+  profileId?: string;
+  tenantId?: string;
+  store: SessionStore;
+};
+
 export class DeviceLoginCancelledError extends Error {
   constructor() {
     super("device login cancelled by a platform profile switch");
@@ -150,17 +159,36 @@ export class AuthClient {
 
   constructor(
     private readonly cfg: Config,
-    private store: SessionStore,
+    private profileStore: SessionStore,
   ) {}
 
-  async useProfile(profileId: string): Promise<void> {
-    // A login still polling belongs to the previous issuer: stop it, or its
-    // tokens would land in the new profile's store (or its failure, minutes
-    // later, would be the MCP's last words).
+  /**
+   * The session store of the active profile. Tools switch profiles by applying
+   * one to cfg (platform_use, platform_save activate, ensure_session
+   * profile_id, the CLI); the store follows cfg here so none of them can leave
+   * sessions read from, or tokens saved to, the previous profile.
+   */
+  private get store(): SessionStore {
+    const active = this.cfg.activeProfileId;
+    if (active && this.profileStore.profileId !== undefined && active !== this.profileStore.profileId) {
+      this.switchStore(active);
+    }
+    return this.profileStore;
+  }
+
+  private switchStore(profileId: string): void {
+    // A login still polling belongs to the previous profile: stop it, or its
+    // failure, minutes later, would be the MCP's last words.
     if (this.devicePending) this.devicePending.cancelled.value = true;
     this.devicePending = null;
-    this.store = SessionStore.forProfile(this.cfg.stateHome, profileId);
-    await this.store.ensureHome(this.cfg.stateHome);
+    this.profileStore = SessionStore.forProfile(this.cfg.stateHome, profileId);
+  }
+
+  async useProfile(profileId: string): Promise<void> {
+    // Selecting the profile already in use keeps a login in progress: agents
+    // re-select it while the user is approving the code.
+    if (profileId !== this.profileStore.profileId) this.switchStore(profileId);
+    await this.profileStore.ensureHome(this.cfg.stateHome);
   }
 
   assertIssuerMatch(sess: Session | null): void {
@@ -321,12 +349,20 @@ export class AuthClient {
       return this.finishOrReportPending(wait, waitMs);
     }
 
-    await this.store.ensureHome(this.cfg.stateHome);
+    const store = this.store;
+    await store.ensureHome(this.cfg.stateHome);
+    const target: DeviceTarget = {
+      authority: this.cfg.oidcAuthority,
+      clientId: this.cfg.oidcClientId,
+      profileId: this.cfg.activeProfileId || undefined,
+      tenantId: this.cfg.defaultTenantId || undefined,
+      store,
+    };
     const verifier = b64url(randomBytes(32));
     const challenge = b64url(createHash("sha256").update(verifier).digest());
-    const deviceEndpoint = `${this.cfg.oidcAuthority}/protocol/openid-connect/auth/device`;
+    const deviceEndpoint = `${target.authority}/protocol/openid-connect/auth/device`;
     const startBody = new URLSearchParams({
-      client_id: this.cfg.oidcClientId,
+      client_id: target.clientId,
       scope: this.cfg.oidcScopes.join(" "),
       code_challenge: challenge,
       code_challenge_method: "S256",
@@ -336,18 +372,26 @@ export class AuthClient {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: startBody,
     });
-    const startRaw = (await startRes.json()) as Record<string, unknown>;
-    if (!startRes.ok) {
+    const startText = await startRes.text();
+    let startRaw: Record<string, unknown> | null = null;
+    try {
+      startRaw = JSON.parse(startText) as Record<string, unknown>;
+    } catch {
+      // Not Keycloak: usually an authority without /auth/realms/<realm>.
+    }
+    if (!startRes.ok || !startRaw) {
       throw new Error(
-        `device auth start failed (${startRes.status}): ${JSON.stringify(startRaw)}. ` +
-          `Enable oauth2.device.authorization.grant.enabled (and PKCE S256 if required) on the ${this.cfg.oidcClientId} Keycloak client.`,
+        `device auth start failed (${startRes.status}) at ${deviceEndpoint}: ${startText.trim().slice(0, 200) || "empty response"}. ` +
+          (startRaw
+            ? `Enable oauth2.device.authorization.grant.enabled (and PKCE S256 if required) on the ${target.clientId} Keycloak client.`
+            : `Check the profile's oidc_authority (a Keycloak realm URL such as https://<host>/auth/realms/yaaif); yaaif_platform_list shows the saved profiles.`),
       );
     }
     const deviceCode = String(startRaw.device_code ?? "");
     const userCode = String(startRaw.user_code ?? "");
     const verificationUri = browserFacingVerificationUri(
       String(startRaw.verification_uri_complete ?? startRaw.verification_uri ?? ""),
-      this.cfg.oidcAuthority,
+      target.authority,
       userCode,
     );
     const intervalSec = typeof startRaw.interval === "number" ? startRaw.interval : 5;
@@ -384,6 +428,7 @@ export class AuthClient {
         intervalSec,
         deadline,
         cancelled,
+        target,
       }).finally(() => {
         if (this.devicePending === pending) this.devicePending = null;
       }),
@@ -452,8 +497,9 @@ export class AuthClient {
     intervalSec: number;
     deadline: number;
     cancelled: { value: boolean };
+    target: DeviceTarget;
   }): Promise<Session> {
-    const { deviceCode, verifier, verificationUri, userCode, deadline, cancelled } = opts;
+    const { deviceCode, verifier, verificationUri, userCode, deadline, cancelled, target } = opts;
     let intervalSec = opts.intervalSec;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, Math.max(intervalSec, this.minPollSec) * 1000));
@@ -461,18 +507,26 @@ export class AuthClient {
       const pollBody = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: deviceCode,
-        client_id: this.cfg.oidcClientId,
+        client_id: target.clientId,
         code_verifier: verifier,
       });
-      const tokenRes = await yaaifFetch(`${this.cfg.oidcAuthority}/protocol/openid-connect/token`, {
+      const tokenRes = await yaaifFetch(`${target.authority}/protocol/openid-connect/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: pollBody,
       });
-      const raw = (await tokenRes.json()) as Record<string, unknown>;
+      const tokenText = await tokenRes.text();
+      let raw: Record<string, unknown> = {};
+      try {
+        raw = JSON.parse(tokenText) as Record<string, unknown>;
+      } catch {
+        // A proxy error page: poll again, the code may still be approved.
+        if (!tokenRes.ok && tokenRes.status >= 500) continue;
+        throw new Error(`device auth poll failed (${tokenRes.status}): ${tokenText.trim().slice(0, 200)}`);
+      }
       if (cancelled.value) throw new DeviceLoginCancelledError();
       if (tokenRes.ok && raw.access_token) {
-        return this.persistTokens(raw);
+        return this.persistTokens(raw, target);
       }
       const err = String(raw.error ?? "");
       if (err === "slow_down") intervalSec += 5; // RFC 8628 3.5
@@ -484,7 +538,7 @@ export class AuthClient {
     );
   }
 
-  private async persistTokens(raw: Record<string, unknown>): Promise<Session> {
+  private async persistTokens(raw: Record<string, unknown>, target?: DeviceTarget): Promise<Session> {
     const tokens = tokenSetFromJson(raw);
     const claims = tokens.id_token ? parseIdToken(tokens.id_token) : {};
     const session: Session = {
@@ -492,11 +546,11 @@ export class AuthClient {
       subject: claims.subject,
       email: claims.email,
       name: claims.name,
-      tenant_id: this.cfg.defaultTenantId || undefined,
-      profile_id: this.cfg.activeProfileId || undefined,
-      oidc_authority: this.cfg.oidcAuthority,
+      tenant_id: target ? target.tenantId : this.cfg.defaultTenantId || undefined,
+      profile_id: target ? target.profileId : this.cfg.activeProfileId || undefined,
+      oidc_authority: target ? target.authority : this.cfg.oidcAuthority,
     };
-    await this.store.save(session);
+    await (target?.store ?? this.store).save(session);
     return session;
   }
 

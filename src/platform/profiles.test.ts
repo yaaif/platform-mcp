@@ -88,3 +88,17 @@ test("ProfileStore clones configuration without activating or duplicating destin
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test("parallel tool calls can set the active profile at once", async () => {
+  // platform_use and ensure_session profile_id ran together and one failed
+  // with ENOENT renaming the shared active-profile.json.tmp.
+  const home = await mkdtemp(join(tmpdir(), "yaaif-profiles-parallel-"));
+  try {
+    const store = new ProfileStore(home);
+    const ids = BUILTIN_PROFILES.slice(0, 2).map((profile) => profile.id);
+    await Promise.all(Array.from({ length: 8 }, (_, i) => store.setActive(ids[i % 2])));
+    assert.ok(ids.includes((await store.getActive())?.profile_id ?? ""));
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

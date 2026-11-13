@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { resolveDocsBaseUrl, type Config } from "../config.js";
@@ -156,7 +157,7 @@ export class ProfileStore {
 
   async saveCustom(profiles: PlatformProfile[]): Promise<void> {
     await this.ensureHome();
-    const tmp = `${this.customPath}.tmp`;
+    const tmp = `${this.customPath}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(tmp, JSON.stringify({ profiles }, null, 2), { mode: 0o600 });
     await rename(tmp, this.customPath);
   }
@@ -235,7 +236,8 @@ export class ProfileStore {
     const profile = await this.get(profileId);
     if (!profile) throw new Error(`unknown profile: ${profileId}`);
     const state: ActiveProfileState = { profile_id: profile.id, updated_at: new Date().toISOString() };
-    const tmp = `${this.activePath}.tmp`;
+    // Unique per write: parallel tool calls (platform_use, ensure_session) set it at once.
+    const tmp = `${this.activePath}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
     await rename(tmp, this.activePath);
     return state;
