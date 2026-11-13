@@ -378,15 +378,17 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
         const user_code = result.user_code;
         return ok(
           [
-            "Device login started.",
+            wait ? "Still waiting for the user to approve this code." : "Device login started.",
             `Open this URL: ${verification_uri}`,
             `Enter this code: ${user_code}`,
-            "After the user authorizes, call yaaif_whoami (or yaaif_login_device again).",
-          ].join("\n"),
+            result.expires_at ? `The code stays valid until ${result.expires_at}; approval any time before then completes the sign-in.` : "",
+            "After the user authorizes, call yaaif_whoami (or yaaif_login_device again, which returns this same code until it completes or expires).",
+          ].filter(Boolean).join("\n"),
           {
             status: "pending",
             verification_uri,
             user_code,
+            expires_at: result.expires_at,
           },
         );
       }

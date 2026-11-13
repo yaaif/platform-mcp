@@ -136,6 +136,8 @@ type DevicePending = {
 
 export class AuthClient {
   private devicePending: DevicePending | null = null;
+  /** Lower bound on the device poll interval in seconds (tests lower it). */
+  minPollSec = 2;
 
   constructor(
     private readonly cfg: Config,
@@ -295,12 +297,15 @@ export class AuthClient {
     session?: Session;
     verification_uri: string;
     user_code: string;
+    expires_at?: string;
   }> {
     const wait = opts.wait === true;
-    const timeoutMs = opts.timeout_ms ?? 5 * 60 * 1000;
+    // How long a wait=true call blocks. It does not end the login: the code is
+    // polled until Keycloak expires it, so an approval after this still counts.
+    const waitMs = opts.timeout_ms ?? 5 * 60 * 1000;
 
     if (this.devicePending) {
-      return this.finishOrReportPending(wait);
+      return this.finishOrReportPending(wait, waitMs);
     }
 
     await this.store.ensureHome(this.cfg.stateHome);
@@ -333,7 +338,12 @@ export class AuthClient {
       userCode,
     );
     const intervalSec = typeof startRaw.interval === "number" ? startRaw.interval : 5;
-    const deadline = Date.now() + timeoutMs;
+    // Poll for the code's whole life (Keycloak expires_in), not timeout_ms. A
+    // short timeout_ms (agents pass 1000 with wait=false) used to stop the poll
+    // seconds after the code was shown, so the user's approval was never
+    // collected and every retry showed a new code.
+    const expiresSec = typeof startRaw.expires_in === "number" && startRaw.expires_in > 0 ? startRaw.expires_in : 600;
+    const deadline = Date.now() + expiresSec * 1000;
 
     if (verificationUri) {
       // Server-side clients show the URL and code to the user instead.
@@ -374,46 +384,46 @@ export class AuthClient {
         status: "pending",
         verification_uri: verificationUri,
         user_code: userCode,
+        expires_at: new Date(deadline).toISOString(),
       };
     }
-    return this.finishOrReportPending(true);
+    return this.finishOrReportPending(true, waitMs);
   }
 
-  private async finishOrReportPending(wait: boolean): Promise<{
+  // Complete when the poll has finished, else the same code still pending. A
+  // wait=true call blocks up to waitMs; running out reports pending and keeps
+  // polling, so the user can still approve the code already on screen.
+  private async finishOrReportPending(wait: boolean, waitMs: number): Promise<{
     status: "complete" | "pending";
     session?: Session;
     verification_uri: string;
     user_code: string;
+    expires_at?: string;
   }> {
     const pending = this.devicePending;
     if (!pending) {
       throw new Error("no device login in progress");
     }
-    if (!wait) {
-      const settled = await Promise.race([
-        pending.pollPromise.then((session) => ({ done: true as const, session })),
-        new Promise<{ done: false }>((r) => setTimeout(() => r({ done: false }), 25)),
-      ]);
-      if (settled.done) {
-        return {
-          status: "complete",
-          session: settled.session,
-          verification_uri: pending.verificationUri,
-          user_code: pending.userCode,
-        };
-      }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settled = await Promise.race([
+      pending.pollPromise.then((session) => ({ done: true as const, session })),
+      new Promise<{ done: false }>((r) => {
+        timer = setTimeout(() => r({ done: false }), wait ? Math.max(waitMs, 0) : 25);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    if (settled.done) {
       return {
-        status: "pending",
+        status: "complete",
+        session: settled.session,
         verification_uri: pending.verificationUri,
         user_code: pending.userCode,
       };
     }
-    const session = await pending.pollPromise;
     return {
-      status: "complete",
-      session,
+      status: "pending",
       verification_uri: pending.verificationUri,
       user_code: pending.userCode,
+      expires_at: new Date(pending.deadline).toISOString(),
     };
   }
 
@@ -425,9 +435,10 @@ export class AuthClient {
     intervalSec: number;
     deadline: number;
   }): Promise<Session> {
-    const { deviceCode, verifier, verificationUri, userCode, intervalSec, deadline } = opts;
+    const { deviceCode, verifier, verificationUri, userCode, deadline } = opts;
+    let intervalSec = opts.intervalSec;
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, Math.max(intervalSec, 2) * 1000));
+      await new Promise((r) => setTimeout(r, Math.max(intervalSec, this.minPollSec) * 1000));
       const pollBody = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: deviceCode,
@@ -444,6 +455,7 @@ export class AuthClient {
         return this.persistTokens(raw);
       }
       const err = String(raw.error ?? "");
+      if (err === "slow_down") intervalSec += 5; // RFC 8628 3.5
       if (err === "authorization_pending" || err === "slow_down") continue;
       throw new Error(`device auth poll failed: ${JSON.stringify(raw)}`);
     }
