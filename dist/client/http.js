@@ -17,6 +17,27 @@ export function boundedErrorText(text, max = MAX_ERROR_TEXT) {
         return trimmed;
     return `${trimmed.slice(0, max)}… [truncated ${trimmed.length - max} chars]`;
 }
+export class ApiContextChangedError extends Error {
+    constructor() { super("Request identity, tenant, profile or platform changed before request dispatch"); }
+}
+/** Bounded machine-readable diagnostics alongside the existing HTTP message. */
+export class ApiHttpError extends Error {
+    status;
+    code;
+    details;
+    files;
+    constructor(message, status, payload) {
+        super(message);
+        this.status = status;
+        const root = payload && typeof payload === "object" ? payload : {};
+        const nested = root.error && typeof root.error === "object" ? root.error : root;
+        const code = nested.error_code ?? nested.code ?? root.error_code ?? root.code;
+        this.code = typeof code === "string" ? code.slice(0, 128) : undefined;
+        const strings = (value, max) => Array.isArray(value) ? value.filter((item) => typeof item === "string").slice(0, 50).map(item => item.slice(0, max)) : [];
+        this.details = strings(nested.details ?? root.details, 1000);
+        this.files = strings(nested.files ?? root.files, 512);
+    }
+}
 export class ApiClient {
     cfg;
     auth;
@@ -54,7 +75,7 @@ export class ApiClient {
                 (this.cfg.activeProfileId || session.profile_id || "default") !==
                     expected.profile ||
                 `${this.cfg.apiBaseUrl}|${this.cfg.agentBaseUrl}` !== expected.origin)) {
-            throw new Error("Governance identity, tenant, profile or platform changed before request dispatch");
+            throw new ApiContextChangedError();
         }
         if (!tenantId && !isTenantBootstrapPath(path)) {
             throw new Error("tenant not set; call yaaif_set_tenant (name/slug/uuid) or yaaif_ensure_session");
@@ -114,7 +135,14 @@ export class ApiClient {
     async parseJSON(method, path, res) {
         const text = await res.text();
         if (!res.ok) {
-            throw new Error(`${method} ${path} failed (${res.status}): ${boundedErrorText(text)}`);
+            let payload;
+            if (text.length <= 256 * 1024) {
+                try {
+                    payload = JSON.parse(text);
+                }
+                catch { /* Non-JSON gateway errors keep the bounded text message. */ }
+            }
+            throw new ApiHttpError(`${method} ${path} failed (${res.status}): ${boundedErrorText(text)}`, res.status, payload);
         }
         if (!text.trim() || res.status === 204)
             return undefined;

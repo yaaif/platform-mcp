@@ -1,3 +1,4 @@
+import { skillBranchPath } from "../lib/skillSecurity.js";
 import { registerGovernanceTools } from "./registerGovernance.js";
 import { registerWikiTools } from "./registerWiki.js";
 import { registerPlatformUpdateTools } from "./registerPlatformUpdates.js";
@@ -102,14 +103,14 @@ function registerSkills(server, ctx) {
     });
     server.registerTool("yaaif_skill_file_tree", {
         description: "List the tenant skill files tree (Advanced Skills workspace).",
-        inputSchema: { path: z.string().optional() },
-    }, async ({ path: treePath }) => {
+        inputSchema: { path: z.string().optional(), branch: z.string().optional() },
+    }, async ({ path: treePath, branch }) => {
         const params = new URLSearchParams();
         if (treePath)
             params.set("path", treePath);
         const path = `/api/skill-files/tree${params.size ? `?${params}` : ""}`;
         try {
-            return ok("Fetched skill file tree.", { result: await ctx.api.agentJSON("GET", path) });
+            return ok("Fetched skill file tree.", { result: await ctx.api.agentJSON("GET", skillBranchPath(path, branch)) });
         }
         catch (e) {
             return fail(String(e));
@@ -117,12 +118,12 @@ function registerSkills(server, ctx) {
     });
     server.registerTool("yaaif_skill_read_file", {
         description: "Read a skill pack file from the tenant skills tree.",
-        inputSchema: { path: z.string() },
-    }, async ({ path: filePath }) => {
+        inputSchema: { path: z.string(), branch: z.string().optional() },
+    }, async ({ path: filePath, branch }) => {
         try {
             const path = `/api/skill-files/content?path=${encodeURIComponent(filePath)}`;
             return ok(`Read skill file ${filePath}.`, {
-                result: await ctx.api.agentJSON("GET", path),
+                result: await ctx.api.agentJSON("GET", skillBranchPath(path, branch)),
             });
         }
         catch (e) {
@@ -181,10 +182,12 @@ function registerSkills(server, ctx) {
             path: z.string(),
             content: z.string(),
             method: z.enum(["POST", "PUT"]).optional(),
+            branch: z.string().optional(),
+            if_match: z.string().max(512).regex(/^[^\r\n]+$/).optional(),
         },
-    }, async ({ path, content, method }) => {
+    }, async ({ path, content, method, branch, if_match }) => {
         try {
-            const result = await ctx.api.agentJSON(method || "PUT", "/api/skill-files/content", { path, content });
+            const result = await ctx.api.agentJSON(method || "PUT", skillBranchPath("/api/skill-files/content", branch), { path, content }, if_match ? { headers: { "If-Match": if_match } } : undefined);
             return ok(`Wrote skill file ${path}.`, { result });
         }
         catch (e) {
@@ -258,13 +261,13 @@ function registerSkills(server, ctx) {
     });
     server.registerTool("yaaif_skill_validate", {
         description: "Validate one skill or the catalog.",
-        inputSchema: { skill_id: z.string().optional(), strict: z.boolean().optional() },
-    }, async ({ skill_id, strict }) => {
+        inputSchema: { skill_id: z.string().optional(), strict: z.boolean().optional(), branch: z.string().optional() },
+    }, async ({ skill_id, strict, branch }) => {
         try {
             const body = { strict: strict ?? false };
             if (skill_id)
                 body.skill_id = skill_id;
-            return ok("Validated skills.", { result: await ctx.api.agentJSON("POST", "/api/skills/validate", body) });
+            return ok("Validated skills.", { result: await ctx.api.agentJSON("POST", skillBranchPath("/api/skills/validate", branch), body) });
         }
         catch (e) {
             return fail(String(e));

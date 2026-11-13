@@ -22,6 +22,17 @@ export type ApiFormFile = {
  * stack trace can be many kilobytes, so keep the start and say what was cut.
  */
 export declare function boundedErrorText(text: string, max?: number): string;
+export declare class ApiContextChangedError extends Error {
+    constructor();
+}
+/** Bounded machine-readable diagnostics alongside the existing HTTP message. */
+export declare class ApiHttpError extends Error {
+    readonly status: number;
+    readonly code?: string;
+    readonly details: string[];
+    readonly files: string[];
+    constructor(message: string, status: number, payload?: unknown);
+}
 export declare class ApiClient {
     readonly cfg: Config;
     private readonly auth;

@@ -28,6 +28,7 @@ export const OPENCODE_TOOL_ALLOWLIST = [
   "yaaif_skill_enable",
   "yaaif_skill_map_agents_merge",
   "yaaif_skill_validate",
+  "yaaif_skill_security",
   "yaaif_skill_tools_check",
   // Agents / ambient
   "yaaif_agent_list",

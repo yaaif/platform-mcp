@@ -326,3 +326,56 @@ YAAIF_GOVERNANCE_SMOKE=1 node --import tsx --test src/integration/governanceBrid
 ```
 
 These six-client tests use fresh unauthenticated state. Signed-in tenant and native IDE interaction smoke tests remain release checks.
+
+
+## IDE skill scans, diagnostics, fixes and improvements
+
+All IDE clients share `yaaif_skill_security`:
+
+| action | behavior |
+| --- | --- |
+| `guide` | Read the bundled offline SkillSpector SOP; optional `topic` selects overview, triage, repair, troubleshooting, or sources. |
+| `status` | Read plugin state, readiness, policy and history. |
+| `scan` | Queue a saved-branch scan; optional `workspace_fingerprint` pins the reviewed workspace. |
+| `report` | Read a specific asynchronous job using `scan_id`. |
+| `diagnose` | Validate saved skills and optionally combine one matching-branch scan; paginate/filter normalized issues. |
+| `plan` | Add a repair/improvement outline and affected-file list; `goal` records the requested improvement. |
+| `fix` | Preview or conditionally update one existing file using its exact `if_match` etag. |
+
+Start with authentication and the requested tenant. Pass the same `branch`
+through diagnostics, file reads, repairs and rescans. Read a file first with
+`yaaif_skill_read_file` and retain its content **etag**. `fix` defaults to a dry
+run; application requires `dry_run:false` and `allow_mutating:true`. The server
+checks `If-Match` atomically, protecting edits made after the preview. By default
+an applied repair is followed by branch validation. A validation error after an
+update returns `applied:true`; an ambiguous transport failure returns
+`applied:"unknown"` and must be reconciled by reading the file before retrying.
+
+```json
+{"action":"diagnose","branch":"main","severity":"ERROR","limit":20}
+```
+```json
+{"action":"fix","branch":"main","path":"example/SKILL.md","content":"reviewed replacement","if_match":"W/\"content-etag\"","dry_run":true}
+```
+
+Plans use real validation/security evidence; they do not generate or apply LLM
+rewrites. IDE agents author the replacement content. Evidence whose workspace
+fingerprint differs is explicitly historical. Neither the repair nor scan tools
+change policy, accept findings, activate snapshots, publish, enable, or map
+skills. Skill Security activation is required to scan, but structural validation
+works independently. Read/report tools preserve structured API error codes,
+file paths and bounded diagnostics rather than discarding them into truncated
+HTTP strings.
+
+`yaaif_skill_security_scan` and `yaaif_skill_security_report` remain compatible
+for existing clients. OpenCode exposes the unified tool within its existing
+120-tool budget. File tree/read/write/validate tools and local lifecycle aliases
+now accept `branch`; the write tool also accepts `if_match`.
+
+### SkillSpector SOP for IDE repairs
+
+Use `yaaif_skill_security` with `action: "guide"` for bundled offline guidance,
+or select a topic: `overview`, `triage`, `repair`, `troubleshooting`, `sources`.
+The [SOP entry point](docs/skill-security.md) explains the source attribution,
+version scope, and per-finding or whole-scan **Fix with IDE** workflow. This uses
+the existing tool slot, including in OpenCode.

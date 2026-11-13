@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { ApiClient } from "./http.js";
+import { ApiClient, ApiHttpError } from "./http.js";
 import type { AuthClient } from "../auth/oidc.js";
 import type { Config } from "../config.js";
 
@@ -114,4 +114,22 @@ test("a changed session is rejected before dispatching a reviewed write", async 
     /changed before request dispatch/,
   );
   assert.equal(requests, 0);
+});
+
+
+test("HTTP validation failures preserve bounded machine-readable file diagnostics", async t => {
+  const details = Array.from({length:9},(_,index)=>`example/skill-${index}/SKILL.md: missing required metadata ${"x".repeat(80)}`);
+  const api = await client(t, (_req,res) => {
+    res.writeHead(422,{"content-type":"application/json"});
+    res.end(JSON.stringify({error:"Saved skills are invalid",error_code:"skill_structure_invalid",details,files:["example/skill-0/SKILL.md"]}));
+  });
+  await assert.rejects(api.agentJSON("POST","/api/skills/security/scans?branch=main",{}), error => {
+    assert.ok(error instanceof ApiHttpError);
+    assert.equal(error.status,422);
+    assert.equal(error.code,"skill_structure_invalid");
+    assert.deepEqual(error.details,details);
+    assert.deepEqual(error.files,["example/skill-0/SKILL.md"]);
+    assert.match(error.message,/truncated/);
+    return true;
+  });
 });

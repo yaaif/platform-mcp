@@ -1,3 +1,4 @@
+import { registerSkillSecurityTools } from "./registerSkillSecurity.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Ctx } from "./ctx.js";
@@ -54,6 +55,8 @@ async function callLocal(
 }
 
 export function registerLocalTools(server: McpServer, ctx: Ctx): void {
+  registerSkillSecurityTools(server, ctx);
+
   server.registerTool("yaaif_local_tools_list", {
     description:
       "List agent-service built-in local tools (skill lifecycle, files, ambient trigger, state, approvals). Use when authoring SKILL.md tools: lists.",
@@ -208,6 +211,7 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
         arguments: z.record(z.unknown()).optional(),
         session_id: z.string().optional(),
         agent_id: z.string().optional(),
+        branch: z.string().optional(),
       },
     }, async (input) => {
       try {
@@ -218,6 +222,7 @@ export function registerLocalTools(server: McpServer, ctx: Ctx): void {
           {
             session_id: input.session_id as string | undefined,
             agent_id: input.agent_id as string | undefined,
+            branch: input.branch as string | undefined,
             resolve_workspace: true,
           },
         );

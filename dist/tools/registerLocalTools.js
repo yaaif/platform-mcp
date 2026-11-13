@@ -1,3 +1,4 @@
+import { registerSkillSecurityTools } from "./registerSkillSecurity.js";
 import { z } from "zod";
 import { fail, ok } from "./helpers.js";
 import { appendClampedLimit, listAllMcpToolNames } from "../lib/catalogLimits.js";
@@ -23,6 +24,7 @@ async function callLocal(ctx, localName, args, opts = {}) {
     });
 }
 export function registerLocalTools(server, ctx) {
+    registerSkillSecurityTools(server, ctx);
     server.registerTool("yaaif_local_tools_list", {
         description: "List agent-service built-in local tools (skill lifecycle, files, ambient trigger, state, approvals). Use when authoring SKILL.md tools: lists.",
         inputSchema: {
@@ -175,12 +177,14 @@ export function registerLocalTools(server, ctx) {
                 arguments: z.record(z.unknown()).optional(),
                 session_id: z.string().optional(),
                 agent_id: z.string().optional(),
+                branch: z.string().optional(),
             },
         }, async (input) => {
             try {
                 const result = await callLocal(ctx, localName, input.arguments ?? {}, {
                     session_id: input.session_id,
                     agent_id: input.agent_id,
+                    branch: input.branch,
                     resolve_workspace: true,
                 });
                 if (result?.is_error) {

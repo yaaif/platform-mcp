@@ -18,6 +18,7 @@
   "files": [
     "dist",
     "plugin-contract.json",
+    "docs",
     "README.md"
   ],
   "scripts": {
