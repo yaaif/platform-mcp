@@ -129,9 +129,24 @@ export function builtinProfiles(oidcClientId = "yaaif-cursor"): PlatformProfile[
 
 export const BUILTIN_PROFILES: PlatformProfile[] = builtinProfiles();
 
+/** A tool tried to switch away from the platform the installation fixed. */
+export class PlatformLockedError extends Error {
+  readonly code = "platform_locked";
+  constructor(readonly locked: PlatformProfile, attempted: string) {
+    super(
+      `This workspace is bound to ${locked.api_base_url} (profile ${locked.id}) by its installation; ` +
+        `'${attempted}' cannot be used here and no platform setup is needed. ` +
+        "Call yaaif_ensure_session to check the sign-in, and yaaif_login_device if it reports login required.",
+    );
+    this.name = "PlatformLockedError";
+  }
+}
+
 export class ProfileStore {
   readonly customPath: string;
   readonly activePath: string;
+  /** Set by lock(): the only profile setActive accepts, which tools cannot overwrite. */
+  private locked: PlatformProfile | null = null;
 
   constructor(
     private readonly stateHome: string,
@@ -162,7 +177,27 @@ export class ProfileStore {
     await rename(tmp, this.customPath);
   }
 
+  get lockedProfile(): PlatformProfile | null {
+    return this.locked;
+  }
+
+  /**
+   * Bind this store to the installation's platform: save the profile (custom
+   * ones are rewritten from the environment on every start, so an edit cannot
+   * stick), make it active, and refuse any other from then on.
+   */
+  async lock(profile: PlatformProfile): Promise<PlatformProfile> {
+    this.locked = null;
+    const saved = profile.builtin ? profile : await this.upsertCustom(profile);
+    if ((await this.getActive())?.profile_id !== saved.id) await this.setActive(saved.id);
+    this.locked = saved;
+    return saved;
+  }
+
   async upsertCustom(profile: PlatformProfile): Promise<PlatformProfile> {
+    if (this.locked && profile.id.trim().toLowerCase() === this.locked.id) {
+      throw new PlatformLockedError(this.locked, profile.id);
+    }
     const id = profile.id.trim().toLowerCase();
     if (!id || builtinProfiles(this.defaultOidcClientId).some((b) => b.id === id)) {
       throw new Error(`profile id '${id}' is reserved or invalid`);
@@ -205,6 +240,7 @@ export class ProfileStore {
   }
 
   async deleteCustom(profileId: string): Promise<boolean> {
+    if (this.locked && profileId.trim().toLowerCase() === this.locked.id) throw new PlatformLockedError(this.locked, profileId);
     const id = profileId.trim().toLowerCase();
     const existing = await this.listCustom();
     const next = existing.filter((p) => p.id !== id);
@@ -232,6 +268,7 @@ export class ProfileStore {
   }
 
   async setActive(profileId: string): Promise<ActiveProfileState> {
+    if (this.locked && profileId !== this.locked.id) throw new PlatformLockedError(this.locked, profileId);
     await this.ensureHome();
     const profile = await this.get(profileId);
     if (!profile) throw new Error(`unknown profile: ${profileId}`);
@@ -281,4 +318,33 @@ export async function applyActiveProfile(cfg: Config, store: ProfileStore): Prom
   }
   applyProfileToConfig(cfg, profile);
   return profile;
+}
+
+/**
+ * The profile a locked installation runs with, from its environment: a
+ * built-in profile when the endpoints match one, else a custom profile named
+ * after the API host (or YAAIF_PLATFORM_PROFILE).
+ */
+export function lockedProfileFromConfig(cfg: Config): PlatformProfile {
+  const api = trimSlash(cfg.apiBaseUrl);
+  const oidc = trimSlash(cfg.oidcAuthority);
+  const builtin = builtinProfiles(cfg.oidcClientId).find(
+    (p) => trimSlash(p.api_base_url) === api && trimSlash(p.oidc_authority) === oidc
+      && trimSlash(p.agent_base_url) === trimSlash(cfg.agentBaseUrl),
+  );
+  if (builtin) return builtin;
+  const host = new URL(api).hostname.toLowerCase();
+  const id = (cfg.activeProfileId || profileIdFromHostname(host)).trim().toLowerCase();
+  return {
+    id: builtinProfiles(cfg.oidcClientId).some((p) => p.id === id) ? `custom-${id}` : id,
+    label: `${host} (set by this installation)`,
+    description: "Platform fixed by the installation that runs this MCP; not editable from tools.",
+    builtin: false,
+    oidc_authority: oidc,
+    api_base_url: api,
+    agent_base_url: trimSlash(cfg.agentBaseUrl),
+    control_plane_base_url: trimSlash(cfg.controlPlaneBaseUrl),
+    approval_base_url: trimSlash(cfg.approvalBaseUrl),
+    oidc_client_id: cfg.oidcClientId,
+  };
 }

@@ -6,6 +6,7 @@ import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/t
 import { exportProfileEnv } from "../lib/profileExport.js";
 import {
   applyProfileToConfig,
+  PlatformLockedError,
   inferProfileId,
   type PlatformProfile,
 } from "../platform/profiles.js";
@@ -173,6 +174,9 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
     return ok("Listed platform profiles.", {
       active_profile_id: active?.profile_id || ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
       inferred_profile_id: inferProfileId(ctx.cfg),
+      ...(ctx.profiles.lockedProfile
+        ? { locked_profile_id: ctx.profiles.lockedProfile.id, note: "This workspace's installation fixed the platform; other profiles cannot be activated." }
+        : {}),
       profiles: withSessions,
       current: {
         oidc_authority: ctx.cfg.oidcAuthority,
@@ -252,6 +256,11 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
     },
   }, async (args) => {
     try {
+      const locked = ctx.profiles.lockedProfile;
+      if (locked && args.activate && args.id.trim().toLowerCase() !== locked.id) {
+        // Refuse before saving: the profile could never be activated here.
+        throw new PlatformLockedError(locked, args.id);
+      }
       const profile = await ctx.profiles.upsertCustom({
         id: args.id,
         label: args.label || args.id,
@@ -537,7 +546,17 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
   }, async ({ login_if_needed, tenant, profile_id }) => {
     try {
       let profile_auto_switched: string | undefined;
-      if (profile_id) {
+      let profile_ignored: string | undefined;
+      const locked = ctx.profiles.lockedProfile;
+      const lockNote = () => (locked
+        ? { platform_locked: true, ...(profile_ignored ? { profile_id_ignored: profile_ignored, note: `profile_id ${profile_ignored} ignored: this workspace is bound to ${locked.id}.` } : {}) }
+        : {});
+      if (locked) {
+        // The installation fixed the platform: a profile id from an older
+        // prompt or session must not switch it (or fail the call).
+        if (profile_id && profile_id !== locked.id) profile_ignored = profile_id;
+        installTlsDispatcher(ctx.cfg);
+      } else if (profile_id) {
         const profile = await ctx.profiles.get(profile_id);
         if (!profile) return fail(`unknown profile: ${profile_id}`);
         await ctx.profiles.setActive(profile.id);
@@ -577,6 +596,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
             ? "Install mkcert (mkcert -install) or set YAAIF_EXTRA_CA_FILE to rootCA.pem"
             : undefined,
           profile_auto_switched,
+          ...lockNote(),
         });
       }
 
@@ -600,7 +620,9 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
             ready: false,
             reauth_required: true,
             profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+            ...lockNote(),
             oidc,
+            ...(locked ? { next: "Call yaaif_login_device, show the URL and code, and call it again after the user approves; the same code stays valid until it expires." } : {}),
           });
         }
         if (!browserLoginAvailable(ctx.cfg)) return deviceLoginRequired(ctx, oidc);
@@ -637,6 +659,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
           auth_url,
           profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
           profile_auto_switched,
+          ...lockNote(),
           oidc_authority: ctx.cfg.oidcAuthority,
           api_base: ctx.cfg.apiBaseUrl,
           ca_source: getTlsResolveInfo().ca_source,
@@ -658,6 +681,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
           auth_url,
           profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
           profile_auto_switched,
+          ...lockNote(),
           oidc_authority: ctx.cfg.oidcAuthority,
           tenants: auto.tenants,
           last_tenant_id: auto.last_tenant_id,
@@ -673,6 +697,7 @@ export function registerAuthTools(server: McpServer, ctx: Ctx): void {
         auth_url,
         profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
         profile_auto_switched,
+          ...lockNote(),
         oidc_authority: ctx.cfg.oidcAuthority,
         api_base: ctx.cfg.apiBaseUrl,
         ca_source: getTlsResolveInfo().ca_source,

@@ -148,5 +148,6 @@ export function loadConfig(client = clientDescriptor("cursor")) {
         extraCaFile: env("YAAIF_EXTRA_CA_FILE", env("NODE_EXTRA_CA_CERTS")),
         clientCertFile: env("YAAIF_CLIENT_CERT_FILE"),
         clientKeyFile: env("YAAIF_CLIENT_KEY_FILE"),
+        platformLocked: /^(1|true|yes)$/i.test(env("YAAIF_PLATFORM_LOCKED")),
     };
 }

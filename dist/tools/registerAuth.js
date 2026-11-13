@@ -3,7 +3,7 @@ import { browserLoginAvailable, IssuerMismatchError, ReauthRequiredError } from 
 import { SessionStore } from "../auth/store.js";
 import { getTlsResolveInfo, installTlsDispatcher, yaaifFetch } from "../client/tls.js";
 import { exportProfileEnv } from "../lib/profileExport.js";
-import { applyProfileToConfig, inferProfileId, } from "../platform/profiles.js";
+import { applyProfileToConfig, PlatformLockedError, inferProfileId, } from "../platform/profiles.js";
 import { normalizeTenants, parseLastTenantId, parseTenantMemberships, resolveTenant, } from "../platform/tenants.js";
 import { fail, ok } from "./helpers.js";
 async function probeOidc(authority) {
@@ -151,6 +151,9 @@ export function registerAuthTools(server, ctx) {
         return ok("Listed platform profiles.", {
             active_profile_id: active?.profile_id || ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
             inferred_profile_id: inferProfileId(ctx.cfg),
+            ...(ctx.profiles.lockedProfile
+                ? { locked_profile_id: ctx.profiles.lockedProfile.id, note: "This workspace's installation fixed the platform; other profiles cannot be activated." }
+                : {}),
             profiles: withSessions,
             current: {
                 oidc_authority: ctx.cfg.oidcAuthority,
@@ -228,6 +231,11 @@ export function registerAuthTools(server, ctx) {
         },
     }, async (args) => {
         try {
+            const locked = ctx.profiles.lockedProfile;
+            if (locked && args.activate && args.id.trim().toLowerCase() !== locked.id) {
+                // Refuse before saving: the profile could never be activated here.
+                throw new PlatformLockedError(locked, args.id);
+            }
             const profile = await ctx.profiles.upsertCustom({
                 id: args.id,
                 label: args.label || args.id,
@@ -517,7 +525,19 @@ export function registerAuthTools(server, ctx) {
     }, async ({ login_if_needed, tenant, profile_id }) => {
         try {
             let profile_auto_switched;
-            if (profile_id) {
+            let profile_ignored;
+            const locked = ctx.profiles.lockedProfile;
+            const lockNote = () => (locked
+                ? { platform_locked: true, ...(profile_ignored ? { profile_id_ignored: profile_ignored, note: `profile_id ${profile_ignored} ignored: this workspace is bound to ${locked.id}.` } : {}) }
+                : {});
+            if (locked) {
+                // The installation fixed the platform: a profile id from an older
+                // prompt or session must not switch it (or fail the call).
+                if (profile_id && profile_id !== locked.id)
+                    profile_ignored = profile_id;
+                installTlsDispatcher(ctx.cfg);
+            }
+            else if (profile_id) {
                 const profile = await ctx.profiles.get(profile_id);
                 if (!profile)
                     return fail(`unknown profile: ${profile_id}`);
@@ -560,6 +580,7 @@ export function registerAuthTools(server, ctx) {
                         ? "Install mkcert (mkcert -install) or set YAAIF_EXTRA_CA_FILE to rootCA.pem"
                         : undefined,
                     profile_auto_switched,
+                    ...lockNote(),
                 });
             }
             let sess = await ctx.auth.session();
@@ -583,7 +604,9 @@ export function registerAuthTools(server, ctx) {
                         ready: false,
                         reauth_required: true,
                         profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
+                        ...lockNote(),
                         oidc,
+                        ...(locked ? { next: "Call yaaif_login_device, show the URL and code, and call it again after the user approves; the same code stays valid until it expires." } : {}),
                     });
                 }
                 if (!browserLoginAvailable(ctx.cfg))
@@ -624,6 +647,7 @@ export function registerAuthTools(server, ctx) {
                     auth_url,
                     profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
                     profile_auto_switched,
+                    ...lockNote(),
                     oidc_authority: ctx.cfg.oidcAuthority,
                     api_base: ctx.cfg.apiBaseUrl,
                     ca_source: getTlsResolveInfo().ca_source,
@@ -644,6 +668,7 @@ export function registerAuthTools(server, ctx) {
                     auth_url,
                     profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
                     profile_auto_switched,
+                    ...lockNote(),
                     oidc_authority: ctx.cfg.oidcAuthority,
                     tenants: auto.tenants,
                     last_tenant_id: auto.last_tenant_id,
@@ -658,6 +683,7 @@ export function registerAuthTools(server, ctx) {
                 auth_url,
                 profile_id: ctx.cfg.activeProfileId || inferProfileId(ctx.cfg),
                 profile_auto_switched,
+                ...lockNote(),
                 oidc_authority: ctx.cfg.oidcAuthority,
                 api_base: ctx.cfg.apiBaseUrl,
                 ca_source: getTlsResolveInfo().ca_source,

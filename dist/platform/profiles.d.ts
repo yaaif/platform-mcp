@@ -35,15 +35,30 @@ export declare function profileIdFromHostname(hostname: string): string;
 export declare function profileFromPlatformUrl(raw: string, oidcClientId?: string): PlatformProfile;
 export declare function builtinProfiles(oidcClientId?: string): PlatformProfile[];
 export declare const BUILTIN_PROFILES: PlatformProfile[];
+/** A tool tried to switch away from the platform the installation fixed. */
+export declare class PlatformLockedError extends Error {
+    readonly locked: PlatformProfile;
+    readonly code = "platform_locked";
+    constructor(locked: PlatformProfile, attempted: string);
+}
 export declare class ProfileStore {
     private readonly stateHome;
     private readonly defaultOidcClientId;
     readonly customPath: string;
     readonly activePath: string;
+    /** Set by lock(): the only profile setActive accepts, which tools cannot overwrite. */
+    private locked;
     constructor(stateHome: string, defaultOidcClientId?: string);
     ensureHome(): Promise<void>;
     listCustom(): Promise<PlatformProfile[]>;
     saveCustom(profiles: PlatformProfile[]): Promise<void>;
+    get lockedProfile(): PlatformProfile | null;
+    /**
+     * Bind this store to the installation's platform: save the profile (custom
+     * ones are rewritten from the environment on every start, so an edit cannot
+     * stick), make it active, and refuse any other from then on.
+     */
+    lock(profile: PlatformProfile): Promise<PlatformProfile>;
     upsertCustom(profile: PlatformProfile): Promise<PlatformProfile>;
     cloneCustom(sourceId: string, destinationId: string, label?: string): Promise<PlatformProfile>;
     deleteCustom(profileId: string): Promise<boolean>;
@@ -55,3 +70,9 @@ export declare class ProfileStore {
 export declare function applyProfileToConfig(cfg: Config, profile: PlatformProfile): Config;
 export declare function inferProfileId(cfg: Config): string;
 export declare function applyActiveProfile(cfg: Config, store: ProfileStore): Promise<PlatformProfile | null>;
+/**
+ * The profile a locked installation runs with, from its environment: a
+ * built-in profile when the endpoints match one, else a custom profile named
+ * after the API host (or YAAIF_PLATFORM_PROFILE).
+ */
+export declare function lockedProfileFromConfig(cfg: Config): PlatformProfile;

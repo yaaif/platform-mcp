@@ -118,6 +118,12 @@ export type Config = {
   clientCertFile: string;
   /** Client private key PEM for mTLS (optional). */
   clientKeyFile: string;
+  /**
+   * YAAIF_PLATFORM_LOCKED: the installation that runs this MCP (a managed
+   * OpenCode workspace) fixed the platform in the environment. The profile is
+   * rebuilt from it on every start and cannot be switched by tools.
+   */
+  platformLocked: boolean;
 };
 
 export function clientDescriptor(client: BridgeClient): ClientDescriptor<BridgeClient> {
@@ -192,5 +198,6 @@ export function loadConfig(client: ClientDescriptor = clientDescriptor("cursor")
     extraCaFile: env("YAAIF_EXTRA_CA_FILE", env("NODE_EXTRA_CA_CERTS")),
     clientCertFile: env("YAAIF_CLIENT_CERT_FILE"),
     clientKeyFile: env("YAAIF_CLIENT_KEY_FILE"),
+    platformLocked: /^(1|true|yes)$/i.test(env("YAAIF_PLATFORM_LOCKED")),
   };
 }

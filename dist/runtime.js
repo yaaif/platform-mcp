@@ -6,14 +6,20 @@ import { installTlsDispatcher } from "./client/tls.js";
 import { loadConfig } from "./config.js";
 import { PlanExecutionStore } from "./lib/planExecution.js";
 import { TelemetryStore } from "./lib/telemetry.js";
-import { applyActiveProfile, applyProfileToConfig, inferProfileId, ProfileStore } from "./platform/profiles.js";
+import { applyActiveProfile, applyProfileToConfig, inferProfileId, lockedProfileFromConfig, ProfileStore } from "./platform/profiles.js";
+import { adoptIssuerSession } from "./platform/lockSession.js";
 import { registerAllTools } from "./tools/register.js";
 import { PACKAGE_VERSION } from "./version.js";
 export async function createRuntime(client, profileId) {
     const cfg = loadConfig(client);
     const profiles = new ProfileStore(cfg.stateHome, cfg.client.oidcClientId);
     await profiles.ensureHome();
-    if (profileId) {
+    if (cfg.platformLocked) {
+        // The installation's environment decides the platform, not a profile an
+        // agent saved or activated in an earlier session.
+        applyProfileToConfig(cfg, await profiles.lock(lockedProfileFromConfig(cfg)));
+    }
+    else if (profileId) {
         const profile = await profiles.get(profileId);
         if (!profile)
             throw new Error(`unknown profile: ${profileId}`);
@@ -32,6 +38,11 @@ export async function createRuntime(client, profileId) {
     await store.ensureHome(cfg.stateHome);
     if (!profileId)
         await store.migrateLegacySession(cfg.stateHome);
+    if (cfg.platformLocked) {
+        const from = await adoptIssuerSession(cfg.stateHome, store, cfg.activeProfileId, cfg.oidcAuthority).catch(() => null);
+        if (from)
+            console.error(`yaaif: using the ${from} sign-in for ${cfg.activeProfileId} (same issuer)`);
+    }
     installTlsDispatcher(cfg);
     const auth = new AuthClient(cfg, store);
     return {
